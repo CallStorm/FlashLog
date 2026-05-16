@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.*
+.idea/
+.vscode/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+*.apk
+*.aab
+*.keystore

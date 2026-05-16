@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply min-h-dvh bg-stone-950 text-stone-100 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  #root {
+    @apply min-h-dvh;
+  }
+}
+
+@layer components {
+  .input-field {
+    @apply w-full rounded-xl border border-stone-700 bg-stone-950 px-3 py-2.5 text-sm text-stone-100 placeholder:text-stone-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/30 disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-medium text-stone-950 transition-colors hover:bg-amber-400 disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-stone-600 bg-stone-900 px-4 py-2.5 text-sm text-stone-200 transition-colors hover:border-amber-500/40 hover:text-amber-300 disabled:opacity-40;
+  }
+
+  .btn-icon {
+    @apply inline-flex flex-col items-center justify-center gap-1 rounded-xl border border-stone-700 bg-stone-900 px-3 py-3 text-stone-300 transition-colors hover:border-amber-500/30 disabled:opacity-40;
+  }
+}
