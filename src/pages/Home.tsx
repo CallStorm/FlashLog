@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Mic, Sparkles, Save } from 'lucide-react';
 import type { HomeNavigationState } from '@/components/ReminderHost';
 import { WorkLogCardForm } from '@/components/WorkLogCardForm';
 import { Toast } from '@/components/Toast';
+import { VoiceRecordingOverlay } from '@/components/VoiceRecordingOverlay';
 import { insertWorkLog } from '@/db/workLogRepository';
 import { AiServiceError, streamChatCompletion } from '@/services/aiService';
 import {
@@ -17,6 +24,8 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { refreshPendingWorklogs } from '@/utils/refreshPending';
 import { formatDateLabel, getTodayLocal } from '@/utils/date';
 import { parseWorkLogCard } from '@/utils/jsonCard';
+
+const CANCEL_SLIDE_PX = 72;
 
 export function Home() {
   const navigate = useNavigate();
@@ -48,9 +57,12 @@ export function Home() {
     variant?: 'info' | 'error' | 'success';
   } | null>(null);
   const [parseError, setParseError] = useState(false);
+  const [cancelIntent, setCancelIntent] = useState(false);
   const recordingRef = useRef<RecordingSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement>(null);
+  const pointerStartYRef = useRef(0);
+  const micHeldRef = useRef(false);
 
   const today = getTodayLocal();
   const refDate = referenceDate || today;
@@ -111,8 +123,14 @@ export function Home() {
       const session = new RecordingSession();
       recordingRef.current = session;
       await session.start();
+      if (!micHeldRef.current) {
+        session.cancel();
+        recordingRef.current = null;
+        return;
+      }
       setStatus('recording');
     } catch (err) {
+      recordingRef.current = null;
       setToast({
         message: err instanceof AsrServiceError ? err.message : '无法开始录音',
         variant: 'error',
@@ -120,9 +138,18 @@ export function Home() {
     }
   };
 
+  const handleMicCancel = () => {
+    const session = recordingRef.current;
+    if (!session) return;
+    session.cancel();
+    recordingRef.current = null;
+    setStatus(draftText.trim() ? 'draftReady' : 'idle');
+    setToast({ message: '已取消', variant: 'info' });
+  };
+
   const handleMicUp = async () => {
     const session = recordingRef.current;
-    if (!session || status !== 'recording') return;
+    if (!session) return;
 
     setStatus('transcribing');
     try {
@@ -139,6 +166,34 @@ export function Home() {
         variant: 'error',
       });
     }
+  };
+
+  const handleMicPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (status === 'transcribing' || status === 'streaming') return;
+    e.preventDefault();
+    micHeldRef.current = true;
+    setCancelIntent(false);
+    pointerStartYRef.current = e.clientY;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    void handleMicDown();
+  };
+
+  const handleMicPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!recordingRef.current) return;
+    setCancelIntent(pointerStartYRef.current - e.clientY > CANCEL_SLIDE_PX);
+  };
+
+  const endMicGesture = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    micHeldRef.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    const shouldCancel =
+      pointerStartYRef.current - e.clientY > CANCEL_SLIDE_PX;
+    setCancelIntent(false);
+    if (!recordingRef.current) return;
+    if (shouldCancel) handleMicCancel();
+    else void handleMicUp();
   };
 
   const handleAiSummarize = async () => {
@@ -253,18 +308,6 @@ export function Home() {
     <div className="mx-auto max-w-lg space-y-3 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
       <header>
         <h1 className="page-title">工作记录</h1>
-        <p className="mt-1 text-sm text-muted">
-          正在记录：{formatDateLabel(refDate)}（{refDate}）
-          {refDate !== today && (
-            <button
-              type="button"
-              onClick={() => setReferenceDate(today)}
-              className="link-accent ml-2"
-            >
-              改回今天
-            </button>
-          )}
-        </p>
       </header>
 
       {!llmKeyConfigured && (
@@ -276,18 +319,6 @@ export function Home() {
           未配置 LLM API Key，AI 总结不可用。可手动填写卡片保存，或前往设置配置。
         </button>
       )}
-
-      <div className="card-surface input-composer">
-        <textarea
-          ref={draftInputRef}
-          value={draftText}
-          onChange={(e) => setDraftText(e.target.value)}
-          disabled={status === 'recording' || status === 'transcribing'}
-          placeholder={inputPlaceholder}
-          rows={5}
-          className="input-field-embedded"
-        />
-      </div>
 
       {status === 'streaming' && (
         <div className="card-surface p-4">
@@ -325,36 +356,58 @@ export function Home() {
         </>
       )}
 
-      <div className="flex gap-2 pt-2">
-        <button
-          type="button"
-          onPointerDown={() => void handleMicDown()}
-          onPointerUp={() => void handleMicUp()}
-          onPointerLeave={() => {
-            if (status === 'recording') void handleMicUp();
-          }}
-          disabled={status === 'transcribing' || status === 'streaming'}
-          className={`btn-ghost-action ${
-            status === 'recording' ? 'btn-ghost-recording' : ''
-          }`}
-        >
-          {status === 'recording' || status === 'transcribing' ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Mic className="h-5 w-5" />
-          )}
-          {status === 'recording'
-            ? `录音中 ${Math.floor((recordingRef.current?.getElapsedMs() ?? 0) / 1000)}s`
-            : status === 'transcribing'
-              ? '转写中'
-              : '按住说话'}
-        </button>
+      <div className="recording-anchor">
+        {status === 'recording' && (
+          <VoiceRecordingOverlay
+            active
+            cancelIntent={cancelIntent}
+            getBandLevels={(n) => recordingRef.current?.getAudioBandLevels(n) ?? []}
+          />
+        )}
+
+        <div className="card-surface input-composer">
+          <textarea
+            ref={draftInputRef}
+            value={draftText}
+            onChange={(e) => setDraftText(e.target.value)}
+            disabled={status === 'recording' || status === 'transcribing'}
+            placeholder={inputPlaceholder}
+            rows={5}
+            className="input-field-embedded"
+          />
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onPointerDown={handleMicPointerDown}
+            onPointerMove={handleMicPointerMove}
+            onPointerUp={endMicGesture}
+            onPointerCancel={endMicGesture}
+            disabled={status === 'transcribing' || status === 'streaming'}
+            className={`btn-ghost-action btn-hold-talk relative z-20 w-full touch-none ${
+              status === 'recording' ? 'btn-ghost-recording' : ''
+            }`}
+          >
+            {status === 'recording' || status === 'transcribing' ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Mic className="h-5 w-5" />
+            )}
+            {status === 'recording'
+              ? '录音中…'
+              : status === 'transcribing'
+                ? '转写中'
+                : '按住说话'}
+          </button>
+        </div>
 
         <button
           type="button"
           onClick={() => void handleAiSummarize()}
           disabled={!canAiSummarize}
-          className="btn-gemini flex-1"
+          className="btn-gemini relative z-20 flex-1"
         >
           {status === 'streaming' ? (
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -365,11 +418,16 @@ export function Home() {
         </button>
 
         {showSave && (
-          <button type="button" onClick={() => void handleSave()} className="btn-primary flex-1">
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            className="btn-primary relative z-20 flex-1"
+          >
             <Save className="h-5 w-5" />
             保存
           </button>
         )}
+        </div>
       </div>
 
       {status === 'recording' &&

@@ -6,6 +6,10 @@ import {
   needsPcmConversion,
 } from '@/utils/audioPcm';
 import {
+  createAudioLevelMeter,
+  type AudioLevelMeter,
+} from '@/utils/audioLevel';
+import {
   ensureMicrophonePermission,
   micPermissionMessage,
 } from '@/utils/microphonePermission';
@@ -18,9 +22,11 @@ export class RecordingSession {
   private mediaRecorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
   private stream: MediaStream | null = null;
+  private levelMeter: AudioLevelMeter | null = null;
   private startedAt = 0;
   private stopResolve: ((blob: Blob) => void) | null = null;
   private stopReject: ((err: Error) => void) | null = null;
+  private cancelled = false;
 
   async start(): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -65,6 +71,8 @@ export class RecordingSession {
       throw new AsrServiceError('无法访问麦克风', 'PERMISSION');
     }
 
+    this.levelMeter = await createAudioLevelMeter(this.stream);
+
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : MediaRecorder.isTypeSupported('audio/webm')
@@ -75,6 +83,7 @@ export class RecordingSession {
       ? new MediaRecorder(this.stream, { mimeType })
       : new MediaRecorder(this.stream);
     this.chunks = [];
+    this.cancelled = false;
     this.startedAt = Date.now();
 
     this.mediaRecorder.ondataavailable = (e) => {
@@ -86,11 +95,14 @@ export class RecordingSession {
     };
 
     this.mediaRecorder.onstop = () => {
+      const wasCancelled = this.cancelled;
       const blob = new Blob(this.chunks, {
         type: this.mediaRecorder?.mimeType ?? 'audio/webm',
       });
       this.cleanupStream();
-      this.stopResolve?.(blob);
+      if (!wasCancelled) {
+        this.stopResolve?.(blob);
+      }
     };
 
     this.mediaRecorder.start(200);
@@ -124,14 +136,28 @@ export class RecordingSession {
     return this.getElapsedMs() >= MAX_RECORD_MS - 10_000;
   }
 
+  getAudioLevel(): number {
+    return this.levelMeter?.getLevel() ?? 0;
+  }
+
+  getAudioBandLevels(count: number): number[] {
+    return this.levelMeter?.getBandLevels(count) ?? [];
+  }
+
   cancel(): void {
+    this.cancelled = true;
+    this.stopResolve = null;
+    this.stopReject = null;
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.stop();
+    } else {
+      this.cleanupStream();
     }
-    this.cleanupStream();
   }
 
   private cleanupStream(): void {
+    this.levelMeter?.dispose();
+    this.levelMeter = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
   }
