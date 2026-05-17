@@ -19,6 +19,7 @@ import {
   recentDates,
   yearAgoFrom,
 } from '@/utils/date';
+import { refreshPendingWorklogs } from '@/utils/refreshPending';
 
 type HistoryTab = 'list' | 'calendar';
 
@@ -60,6 +61,7 @@ export function History() {
     await deleteWorkLog(id);
     setDeleteId(null);
     await refresh();
+    await refreshPendingWorklogs();
     setToast('已删除');
   };
 
@@ -73,6 +75,7 @@ export function History() {
     });
     setEditing(null);
     await refresh();
+    await refreshPendingWorklogs();
     setToast('已更新');
   };
 

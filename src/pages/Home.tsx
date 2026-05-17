@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Mic, Sparkles, Save } from 'lucide-react';
+import type { HomeNavigationState } from '@/components/ReminderHost';
 import { WorkLogCardForm } from '@/components/WorkLogCardForm';
 import { Toast } from '@/components/Toast';
 import { insertWorkLog } from '@/db/workLogRepository';
@@ -13,10 +14,13 @@ import {
 } from '@/services/asrService';
 import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { refreshPendingWorklogs } from '@/utils/refreshPending';
 import { formatDateLabel, getTodayLocal } from '@/utils/date';
 import { parseWorkLogCard } from '@/utils/jsonCard';
+
 export function Home() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { settings, llmKeyConfigured, asrConfigured, loaded, load } =
     useSettingsStore();
   const {
@@ -37,8 +41,8 @@ export function Home() {
     resetAfterSave,
     persistDraft,
     loadDraft,
+    referenceDate,
   } = useDraftStore();
-
   const [toast, setToast] = useState<{
     message: string;
     variant?: 'info' | 'error' | 'success';
@@ -46,18 +50,35 @@ export function Home() {
   const [parseError, setParseError] = useState(false);
   const recordingRef = useRef<RecordingSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const draftInputRef = useRef<HTMLTextAreaElement>(null);
 
   const today = getTodayLocal();
-  const refDate = today;
+  const refDate = referenceDate || today;
   const inputPlaceholder = `记录${formatDateLabel(refDate)}（${refDate}）的工作；口述可说「昨天」等指定其他日期…`;
 
   useEffect(() => {
     void (async () => {
       await load();
       await loadDraft();
-      setReferenceDate(getTodayLocal());
+      const nav = location.state as HomeNavigationState | null;
+      if (nav?.referenceDate) {
+        setReferenceDate(nav.referenceDate);
+      } else if (!useDraftStore.getState().referenceDate) {
+        setReferenceDate(getTodayLocal());
+      }
+      await refreshPendingWorklogs();
     })();
-  }, [load, loadDraft, setReferenceDate]);
+  }, [load, loadDraft, setReferenceDate, location.state]);
+
+  useEffect(() => {
+    const nav = location.state as HomeNavigationState | null;
+    if (!nav?.focusInput) return;
+    const t = window.setTimeout(() => {
+      draftInputRef.current?.focus();
+      navigate('.', { replace: true, state: {} });
+    }, 100);
+    return () => clearTimeout(t);
+  }, [location.state, navigate]);
 
   useEffect(() => {
     const t = setTimeout(() => void persistDraft(), 500);
@@ -212,6 +233,7 @@ export function Home() {
       resetAfterSave();
       setReferenceDate(today);
       setStatus('saved');
+      await refreshPendingWorklogs();
       setToast({ message: '已保存', variant: 'success' });
       setTimeout(() => setStatus('idle'), 400);
     } catch {
@@ -231,6 +253,18 @@ export function Home() {
     <div className="mx-auto max-w-lg space-y-3 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
       <header>
         <h1 className="page-title">工作记录</h1>
+        <p className="mt-1 text-sm text-muted">
+          正在记录：{formatDateLabel(refDate)}（{refDate}）
+          {refDate !== today && (
+            <button
+              type="button"
+              onClick={() => setReferenceDate(today)}
+              className="link-accent ml-2"
+            >
+              改回今天
+            </button>
+          )}
+        </p>
       </header>
 
       {!llmKeyConfigured && (
@@ -245,6 +279,7 @@ export function Home() {
 
       <div className="card-surface input-composer">
         <textarea
+          ref={draftInputRef}
           value={draftText}
           onChange={(e) => setDraftText(e.target.value)}
           disabled={status === 'recording' || status === 'transcribing'}

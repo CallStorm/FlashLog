@@ -11,9 +11,12 @@ export interface AsrSettings {
   resourceId: string;
 }
 
+export type ReminderRepeat = 'weekdays' | 'daily';
+
 export interface ReminderSettings {
   enabled: boolean;
   time: string;
+  repeat: ReminderRepeat;
 }
 
 export interface AppSettings {

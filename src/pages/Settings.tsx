@@ -7,6 +7,9 @@ import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Toast } from '@/components/Toast';
+import { requestReminderPermission } from '@/services/reminderService';
+import { refreshPendingWorklogs } from '@/utils/refreshPending';
+import type { ReminderRepeat } from '@/types/settings';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -30,6 +33,35 @@ export function Settings() {
   const [asrKeyInput, setAsrKeyInput] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  const reminderTimeForInput =
+    settings.reminder.time.length >= 5 ? settings.reminder.time : '18:00';
+
+  const handleReminderToggle = async (enabled: boolean) => {
+    if (enabled) {
+      const granted = await requestReminderPermission();
+      if (!granted) {
+        setToast('请在系统设置中允许通知权限');
+        return;
+      }
+    }
+    await updateSettings({
+      reminder: { ...settings.reminder, enabled },
+    });
+    setToast(enabled ? '已开启定时提醒' : '已关闭定时提醒');
+  };
+
+  const handleReminderTimeChange = (value: string) => {
+    void updateSettings({
+      reminder: { ...settings.reminder, time: value || '18:00' },
+    });
+  };
+
+  const handleReminderRepeat = (repeat: ReminderRepeat) => {
+    void updateSettings({
+      reminder: { ...settings.reminder, repeat },
+    });
+  };
 
   useEffect(() => {
     void load();
@@ -62,6 +94,7 @@ export function Settings() {
     }
     await clearAllWorkLogs();
     resetDraft();
+    await refreshPendingWorklogs();
     setConfirmClear(false);
     setToast('本地工时与草稿已清除');
   };
@@ -74,6 +107,7 @@ export function Settings() {
           API 调用费用由您自行承担，密钥仅存于本机安全存储。
         </p>
       </header>
+
       <section className="card-surface space-y-3 p-4">
         <h2 className="section-title">外观</h2>
         <p className="text-xs text-muted">选择界面配色，将记住您的选择</p>
@@ -94,7 +128,6 @@ export function Settings() {
           </button>
         </div>
       </section>
-
 
       <section className="card-surface space-y-3 p-4">
         <div className="flex items-center justify-between">
@@ -150,7 +183,6 @@ export function Settings() {
             className="input-field"
           />
         </label>
-
       </section>
 
       <section className="card-surface space-y-3 p-4">
@@ -201,22 +233,52 @@ export function Settings() {
         </label>
       </section>
 
-      <section className="card-surface space-y-3 p-4 opacity-60">
-        <h2 className="font-medium text-secondary">定时提醒（V1.1 预留）</h2>
+      <section className="card-surface space-y-3 p-4">
+        <h2 className="section-title">定时提醒</h2>
+        <p className="text-xs text-muted">
+          到点推送本地通知；工作日模式按中国法定工作日（含调休）排程。待办以 App
+          内列表为准。
+        </p>
         <label className="flex items-center gap-3">
           <input
             type="checkbox"
             checked={settings.reminder.enabled}
-            onChange={(e) =>
-              void updateSettings({
-                reminder: { ...settings.reminder, enabled: e.target.checked },
-              })
-            }
-            disabled
+            onChange={(e) => void handleReminderToggle(e.target.checked)}
             className="h-4 w-4 rounded border-[var(--color-border)]"
           />
-          <span className="text-sm text-muted">每天 {settings.reminder.time} 提醒</span>
+          <span className="text-sm text-secondary">开启提醒</span>
         </label>
+        <label className="block space-y-1">
+          <span className="label-field">提醒时间</span>
+          <input
+            type="time"
+            value={reminderTimeForInput}
+            onChange={(e) => handleReminderTimeChange(e.target.value)}
+            disabled={!settings.reminder.enabled}
+            className="input-field"
+          />
+        </label>
+        <div className="space-y-2">
+          <span className="label-field block">重复</span>
+          <div className="theme-segment" role="group" aria-label="提醒重复">
+            <button
+              type="button"
+              disabled={!settings.reminder.enabled}
+              onClick={() => handleReminderRepeat('weekdays')}
+              className={`theme-segment-btn ${settings.reminder.repeat === 'weekdays' ? 'theme-segment-btn-active' : ''}`}
+            >
+              工作日
+            </button>
+            <button
+              type="button"
+              disabled={!settings.reminder.enabled}
+              onClick={() => handleReminderRepeat('daily')}
+              className={`theme-segment-btn ${settings.reminder.repeat === 'daily' ? 'theme-segment-btn-active' : ''}`}
+            >
+              每天
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -226,12 +288,18 @@ export function Settings() {
           className={`btn-danger-outline ${confirmClear ? 'btn-danger-confirm' : ''}`}
         >
           <Trash2 className="h-4 w-4" />
-          {confirmClear ? '再次点击确认清除所有工时与草稿' : '清除所有本地数据'}
+          {confirmClear
+            ? '再次点击确认清除所有工时与草稿'
+            : '清除所有本地数据'}
         </button>
         <p className="text-center text-xs text-muted">不会清除已保存的 API Key</p>
       </section>
 
-      <button type="button" onClick={() => navigate('/')} className="btn-primary w-full">
+      <button
+        type="button"
+        onClick={() => navigate('/')}
+        className="btn-primary w-full"
+      >
         返回工作记录
       </button>
 

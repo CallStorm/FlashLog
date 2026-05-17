@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reminder: {
     enabled: false,
     time: '18:00',
+    repeat: 'weekdays',
   },
 };
 

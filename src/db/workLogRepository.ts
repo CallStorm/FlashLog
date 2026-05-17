@@ -113,6 +113,19 @@ export async function listByDate(date: string): Promise<WorkLogItem[]> {
   return all.filter((i) => i.date === date).sort((a, b) => a.createdAt - b.createdAt);
 }
 
+export async function getDistinctLoggedDates(): Promise<Set<string>> {
+  if (!isNative) {
+    return new Set(readWeb().map((i) => i.date));
+  }
+
+  const connection = await getDb();
+  const result = await connection.query(
+    `SELECT DISTINCT date FROM work_logs`,
+  );
+  const rows = (result.values ?? []) as { date: string }[];
+  return new Set(rows.map((r) => String(r.date)));
+}
+
 export async function getWorkLog(id: string): Promise<WorkLogItem | null> {
   const all = await listWorkLogs(0);
   return all.find((i) => i.id === id) ?? null;

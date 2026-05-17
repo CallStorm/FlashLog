@@ -3,6 +3,7 @@ import { Preferences } from '@capacitor/preferences';
 import { DEFAULT_SETTINGS } from '@/constants/defaults';
 import type { AppSettings } from '@/types/settings';
 import { SETTINGS_STORAGE_KEY } from '@/types/settings';
+import { syncReminderSchedule } from '@/services/reminderService';
 import { getAsrApiKey, getLlmApiKey, setAsrApiKey, setLlmApiKey } from '@/services/secureConfig';
 
 interface SettingsState {
@@ -71,6 +72,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       asrConfigured,
       loaded: true,
     });
+    await syncReminderSchedule(settings.reminder);
   },
 
   updateSettings: async (patch) => {
@@ -78,6 +80,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await persistSettings(next);
     const asrConfigured = await checkAsrConfigured(next);
     set({ settings: next, asrConfigured });
+    if (patch.reminder !== undefined) {
+      await syncReminderSchedule(next.reminder);
+    }
   },
 
   updateLlm: async (patch) => {
