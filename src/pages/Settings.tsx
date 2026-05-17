@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { DEFAULT_SETTINGS } from '@/constants/defaults';
 import { clearAllWorkLogs } from '@/db/workLogRepository';
-import { maskSecret } from '@/services/secureConfig';
 import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useThemeStore } from '@/stores/themeStore';
@@ -16,13 +15,14 @@ export function Settings() {
     settings,
     loaded,
     load,
+    llmKeyConfigured,
+    asrConfigured,
     updateLlm,
     updateAsr,
     updateSettings,
     setLlmApiKeyValue,
     setAsrApiKeyValue,
     restoreLlmDefaults,
-    restoreSystemPrompt,
   } = useSettingsStore();
   const resetDraft = useDraftStore((s) => s.resetAll);
 
@@ -118,22 +118,28 @@ export function Settings() {
           />
         </label>
 
-        <label className="block space-y-1">
+        <div className="block space-y-1">
           <span className="label-field">API Key（脱敏存储）</span>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={llmKeyInput}
-              onChange={(e) => setLlmKeyInput(e.target.value)}
-              placeholder={maskSecret('configured') || '输入新 Key'}
-              className="input-field flex-1"
-              autoComplete="off"
-            />
-            <button type="button" onClick={() => void handleSaveLlmKey()} className="btn-secondary">
-              保存
-            </button>
-          </div>
-        </label>
+          <input
+            type="password"
+            value={llmKeyInput}
+            onChange={(e) => setLlmKeyInput(e.target.value)}
+            placeholder={llmKeyConfigured ? '输入新 Key 覆盖' : '输入 API Key'}
+            className="input-field w-full"
+            autoComplete="off"
+          />
+          {llmKeyConfigured && (
+            <p className="text-xs text-muted">已保存 Key，输入新值可覆盖</p>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleSaveLlmKey()}
+            disabled={!llmKeyInput.trim()}
+            className="btn-secondary mt-2 w-full"
+          >
+            保存
+          </button>
+        </div>
 
         <label className="block space-y-1">
           <span className="label-field">Model / Endpoint ID（必填）</span>
@@ -145,24 +151,6 @@ export function Settings() {
           />
         </label>
 
-        <label className="block space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="label-field">System Prompt</span>
-            <button
-              type="button"
-              onClick={() => void restoreSystemPrompt()}
-              className="text-xs text-muted hover:text-accent"
-            >
-              恢复默认
-            </button>
-          </div>
-          <textarea
-            value={settings.llm.systemPrompt}
-            onChange={(e) => void updateLlm({ systemPrompt: e.target.value })}
-            rows={8}
-            className="input-field font-mono text-xs leading-relaxed"
-          />
-        </label>
       </section>
 
       <section className="card-surface space-y-3 p-4">
@@ -179,21 +167,28 @@ export function Settings() {
           </a>
         </p>
 
-        <label className="block space-y-1">
+        <div className="block space-y-1">
           <span className="label-field">API Key（X-Api-Key）</span>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={asrKeyInput}
-              onChange={(e) => setAsrKeyInput(e.target.value)}
-              className="input-field flex-1"
-              autoComplete="off"
-            />
-            <button type="button" onClick={() => void handleSaveAsrKey()} className="btn-secondary">
-              保存
-            </button>
-          </div>
-        </label>
+          <input
+            type="password"
+            value={asrKeyInput}
+            onChange={(e) => setAsrKeyInput(e.target.value)}
+            placeholder={asrConfigured ? '输入新 Key 覆盖' : '输入 API Key'}
+            className="input-field w-full"
+            autoComplete="off"
+          />
+          {asrConfigured && (
+            <p className="text-xs text-muted">已保存 Key，输入新值可覆盖</p>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleSaveAsrKey()}
+            disabled={!asrKeyInput.trim()}
+            className="btn-secondary mt-2 w-full"
+          >
+            保存
+          </button>
+        </div>
 
         <label className="block space-y-1">
           <span className="label-field">Resource ID（X-Api-Resource-Id）</span>
