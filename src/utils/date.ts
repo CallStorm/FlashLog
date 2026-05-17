@@ -120,3 +120,35 @@ export function filterLogsByDateRange<T extends { date: string }>(
 ): T[] {
   return items.filter((i) => isDateInRange(i.date, start, end));
 }
+
+/** Hours label for export, e.g. 1.5h or 2h */
+export function formatDurationHours(minutes: number): string {
+  const h = minutes / 60;
+  const rounded = Math.round(h * 10) / 10;
+  if (Number.isInteger(rounded)) return `${rounded}h`;
+  return `${rounded}h`;
+}
+
+export function formatWeekday(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const index = (dt.getDay() + 6) % 7;
+  return WEEKDAY_LABELS[index];
+}
+
+/** Monday of the week containing `ref` (default: today), as YYYY-MM-DD */
+export function getWeekStartMonday(ref?: string): string {
+  const anchor = ref ?? getTodayLocal();
+  const [y, m, d] = anchor.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const mondayOffset = (dt.getDay() + 6) % 7;
+  return addDays(anchor, -mondayOffset);
+}
+
+export function daysBetweenInclusive(start: string, end: string): number {
+  const [sy, sm, sd] = start.split('-').map(Number);
+  const [ey, em, ed] = end.split('-').map(Number);
+  const a = new Date(sy, sm - 1, sd).getTime();
+  const b = new Date(ey, em - 1, ed).getTime();
+  return Math.floor((b - a) / 86_400_000) + 1;
+}

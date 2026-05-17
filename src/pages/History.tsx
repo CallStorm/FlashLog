@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, Pencil, Share2, Trash2 } from 'lucide-react';
+import { ShareWorklogSheet } from '@/components/ShareWorklogSheet';
 import { HistoryCalendarView } from '@/components/HistoryCalendarView';
 import { Toast } from '@/components/Toast';
 import { WorkLogCardForm } from '@/components/WorkLogCardForm';
@@ -15,10 +16,12 @@ import {
   formatDateLabel,
   formatDuration,
   getTodayLocal,
+  getWeekStartMonday,
   groupByDate,
   recentDates,
   yearAgoFrom,
 } from '@/utils/date';
+import type { ExportRange } from '@/services/export/types';
 import { refreshPendingWorklogs } from '@/utils/refreshPending';
 
 type HistoryTab = 'list' | 'calendar';
@@ -31,6 +34,16 @@ export function History() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareRange, setShareRange] = useState<ExportRange>(() => ({
+    start: getWeekStartMonday(),
+    end: getTodayLocal(),
+  }));
+
+  const openShare = (range: ExportRange) => {
+    setShareRange(range);
+    setShareOpen(true);
+  };
 
   const refresh = useCallback(async () => {
     await initWorkLogDb();
@@ -119,8 +132,18 @@ export function History() {
     );
   }
 
+  const shareSheet = (
+    <ShareWorklogSheet
+      open={shareOpen}
+      initialRange={shareRange}
+      onClose={() => setShareOpen(false)}
+      onToast={setToast}
+    />
+  );
+
   if (selectedDate) {
     return (
+      <>
       <div className="mx-auto max-w-lg px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
         <header className="flex items-start gap-1">
           <button
@@ -139,6 +162,14 @@ export function History() {
               <span className="text-sm text-muted">{selectedDate}</span>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => openShare({ start: selectedDate, end: selectedDate })}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-[var(--color-icon-hover)]"
+            aria-label="分享"
+          >
+            <Share2 className="h-5 w-5" />
+          </button>
         </header>
 
         {dayItems.length === 0 ? (
@@ -194,17 +225,34 @@ export function History() {
           <Toast message={toast} variant="info" onClose={() => setToast(null)} />
         )}
       </div>
+      {shareSheet}
+      </>
     );
   }
 
   return (
+    <>
     <div className="mx-auto flex max-w-lg flex-col px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
       <header className="shrink-0 space-y-4">
-        <div>
-          <h1 className="page-title">历史</h1>
-          <p className="mt-1 text-sm text-muted">
-            {tab === 'list' ? '近 30 天，按日期倒序' : '近一年，有工时日期可点击查看'}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="page-title">历史</h1>
+            <p className="mt-1 text-sm text-muted">
+              {tab === 'list' ? '近 30 天，按日期倒序' : '近一年，有工时日期可点击查看'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              openShare({
+                start: getWeekStartMonday(),
+                end: getTodayLocal(),
+              })
+            }
+            className="btn-secondary shrink-0 px-3 py-2 text-sm"
+          >
+            导出
+          </button>
         </div>
 
         <div className="history-segment" role="tablist" aria-label="历史视图">
@@ -273,5 +321,7 @@ export function History() {
         <Toast message={toast} variant="info" onClose={() => setToast(null)} />
       )}
     </div>
+    {shareSheet}
+    </>
   );
 }

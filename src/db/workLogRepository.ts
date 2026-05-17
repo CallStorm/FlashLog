@@ -5,6 +5,7 @@ import {
   type SQLiteDBConnection,
 } from '@capacitor-community/sqlite';
 import type { WorkLogItem } from '@/types/workLog';
+import { filterLogsByDateRange } from '@/utils/date';
 import { generateUuid } from '@/utils/uuid';
 
 const WEB_STORAGE_KEY = 'flashlog_work_logs_v1';
@@ -109,8 +110,28 @@ export async function listWorkLogs(limitDays = 30): Promise<WorkLogItem[]> {
 }
 
 export async function listByDate(date: string): Promise<WorkLogItem[]> {
-  const all = await listWorkLogs(0);
-  return all.filter((i) => i.date === date).sort((a, b) => a.createdAt - b.createdAt);
+  return listByDateRange(date, date);
+}
+
+export async function listByDateRange(
+  start: string,
+  end: string,
+): Promise<WorkLogItem[]> {
+  if (!isNative) {
+    const items = filterLogsByDateRange(readWeb(), start, end);
+    return items.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.createdAt - b.createdAt;
+    });
+  }
+
+  const connection = await getDb();
+  const result = await connection.query(
+    `SELECT * FROM work_logs WHERE date >= ? AND date <= ? ORDER BY date ASC, created_at ASC`,
+    [start, end],
+  );
+  const rows = (result.values ?? []) as Record<string, unknown>[];
+  return rows.map(rowToItem);
 }
 
 export async function getDistinctLoggedDates(): Promise<Set<string>> {
