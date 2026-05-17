@@ -1,9 +1,11 @@
 import { Capacitor } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 import type { AsrSettings } from '@/types/settings';
 import { generateUuid } from '@/utils/uuid';
 import {
   buildNewConsoleAsrHeaders,
   volcAsrAuthHeadersToSearchParams,
+  type VolcAsrAuthHeaders,
 } from '@/services/asrAuth';
 import { getAsrApiKey } from '@/services/secureConfig';
 import { AsrServiceError } from '@/services/asrErrors';
@@ -15,6 +17,11 @@ import {
   parseVolcServerPacket,
   resolveVolcAudioConfig,
 } from '@/services/volcAsrProtocol';
+import {
+  HeaderWebSocket,
+  uint8ArrayToBase64,
+  base64ToArrayBuffer,
+} from '@/plugins/headerWebSocket';
 
 const WS_TIMEOUT_MS = 60_000;
 
@@ -28,47 +35,37 @@ function shouldUseAsrWebSocketProxy(): boolean {
   return import.meta.env.DEV && !Capacitor.isNativePlatform();
 }
 
-/**
- * 新版控制台鉴权必须在 WebSocket 握手 Header 中传递。
- * - 浏览器开发：走 Vite WS 代理，查询参数由代理转为 Header
- * - 原生 App：直连 openspeech（无 CORS），查询参数供网关识别
- */
-export function buildAsrWebSocketUrl(auth: {
-  apiKey: string;
-  resourceId: string;
-  requestId: string;
-}): string {
-  const headers = buildNewConsoleAsrHeaders(auth);
-  const params = volcAsrAuthHeadersToSearchParams(headers);
-  const pathWithQuery = `${VOLC_ASR_NOSTREAM_PATH}?${params.toString()}`;
-
-  if (shouldUseAsrWebSocketProxy()) {
-    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${wsProto}//${window.location.host}${VOLC_ASR_WS_PROXY_PREFIX}${pathWithQuery}`;
-  }
-
-  return `${VOLC_ASR_WSS_ORIGIN}${pathWithQuery}`;
+function volcHeadersToRecord(headers: VolcAsrAuthHeaders): Record<string, string> {
+  return { ...headers };
 }
 
-export async function transcribeViaWebSocket(
-  settings: AsrSettings,
-  audioBuffer: ArrayBuffer,
-  mimeType: string,
-): Promise<string> {
-  const apiKey = (await getAsrApiKey()) || settings.apiKey;
-  if (!apiKey || !settings.resourceId) {
-    throw new AsrServiceError('请配置 ASR API Key 与 Resource ID', 'CONFIG');
+function formatWsFailureMessage(code?: number, reason?: string): string {
+  if (code === 401 || code === 403) {
+    return 'ASR 鉴权失败，请检查 API Key 与 Resource ID 是否正确';
   }
+  if (code === 1006 || code === -1) {
+    return '无法连接语音识别服务，请检查网络或关闭 VPN 后重试';
+  }
+  if (reason?.trim()) {
+    return `WebSocket 连接失败：${reason} (${code ?? 'unknown'})`;
+  }
+  if (code != null) {
+    return `WebSocket 连接失败 (code ${code})`;
+  }
+  return 'WebSocket 连接失败，请检查 API Key 与 Resource ID';
+}
 
-  const requestId = generateUuid();
-  const wsUrl = buildAsrWebSocketUrl({
-    apiKey,
-    resourceId: settings.resourceId,
-    requestId,
-  });
+interface AsrRequestPayload {
+  user: { uid: string };
+  audio: Record<string, unknown>;
+  request: Record<string, unknown>;
+}
 
+async function buildAsrPayload(
+  mimeType: string,
+): Promise<AsrRequestPayload> {
   const { format, codec } = resolveVolcAudioConfig(mimeType);
-  const requestPayload = {
+  return {
     user: { uid: 'flashlog-mvp' },
     audio: {
       format,
@@ -86,12 +83,69 @@ export async function transcribeViaWebSocket(
       result_type: 'full',
     },
   };
+}
 
+async function handleServerPacket(
+  data: ArrayBuffer,
+  finalText: { value: string },
+): Promise<'continue' | 'done' | 'error'> {
+  const packet = await parseVolcServerPacket(data);
+
+  if (packet.type === 'error') {
+    throw new AsrServiceError(
+      `ASR 错误 (${packet.code}): ${packet.message}`,
+      'ASR',
+    );
+  }
+
+  if (packet.type !== 'response') return 'continue';
+
+  const text = extractVolcTranscript(packet.data);
+  if (text) finalText.value = text;
+
+  const payload = packet.data as Record<string, unknown> | undefined;
+  const utterances = (payload?.result as Record<string, unknown> | undefined)
+    ?.utterances;
+  const hasDefinite =
+    Array.isArray(utterances) &&
+    utterances.some((u) => (u as Record<string, unknown>)?.definite === true);
+
+  if (packet.isFinal || hasDefinite) {
+    return 'done';
+  }
+  return 'continue';
+}
+
+/**
+ * 浏览器开发：Vite WS 代理，Query 参数由代理转为 Header。
+ */
+export function buildBrowserProxyWebSocketUrl(auth: {
+  apiKey: string;
+  resourceId: string;
+  requestId: string;
+}): string {
+  const headers = buildNewConsoleAsrHeaders(auth);
+  const params = volcAsrAuthHeadersToSearchParams(headers);
+  const pathWithQuery = `${VOLC_ASR_NOSTREAM_PATH}?${params.toString()}`;
+  const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${wsProto}//${window.location.host}${VOLC_ASR_WS_PROXY_PREFIX}${pathWithQuery}`;
+}
+
+/** 原生 App：直连 URL（鉴权仅通过 OkHttp Header） */
+export function buildNativeWebSocketUrl(): string {
+  return `${VOLC_ASR_WSS_ORIGIN}${VOLC_ASR_NOSTREAM_PATH}`;
+}
+
+async function transcribeViaBrowserWebSocket(
+  wsUrl: string,
+  audioBuffer: ArrayBuffer,
+  requestPayload: AsrRequestPayload,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
 
-    let finalText = '';
+    const finalText = { value: '' };
     let settled = false;
 
     const settle = (fn: () => void) => {
@@ -108,7 +162,11 @@ export async function transcribeViaWebSocket(
 
     ws.onopen = async () => {
       try {
-        ws.send(await buildFullClientRequestFrame(requestPayload));
+        ws.send(
+          await buildFullClientRequestFrame(
+            requestPayload as unknown as Record<string, unknown>,
+          ),
+        );
         ws.send(await buildAudioRequestFrame(new Uint8Array(audioBuffer), true));
       } catch (err) {
         ws.close();
@@ -128,38 +186,11 @@ export async function transcribeViaWebSocket(
           event.data instanceof ArrayBuffer
             ? event.data
             : await (event.data as Blob).arrayBuffer();
-        const packet = await parseVolcServerPacket(data);
-
-        if (packet.type === 'error') {
-          settle(() =>
-            reject(
-              new AsrServiceError(
-                `ASR 错误 (${packet.code}): ${packet.message}`,
-                'ASR',
-              ),
-            ),
-          );
-          return;
-        }
-
-        if (packet.type !== 'response') return;
-
-        const text = extractVolcTranscript(packet.data);
-        if (text) finalText = text;
-
-        const payload = packet.data as Record<string, unknown> | undefined;
-        const utterances = (payload?.result as Record<string, unknown> | undefined)
-          ?.utterances;
-        const hasDefinite =
-          Array.isArray(utterances) &&
-          utterances.some(
-            (u) => (u as Record<string, unknown>)?.definite === true,
-          );
-
-        if (packet.isFinal || hasDefinite) {
+        const outcome = await handleServerPacket(data, finalText);
+        if (outcome === 'done') {
           settle(() => {
             ws.close();
-            if (finalText) resolve(finalText);
+            if (finalText.value) resolve(finalText.value);
             else reject(new AsrServiceError('识别结果为空', 'EMPTY'));
           });
         }
@@ -176,23 +207,18 @@ export async function transcribeViaWebSocket(
 
     ws.onerror = () => {
       settle(() =>
-        reject(
-          new AsrServiceError(
-            'WebSocket 连接失败，请检查 API Key 与 Resource ID',
-            'WS',
-          ),
-        ),
+        reject(new AsrServiceError(formatWsFailureMessage(), 'WS')),
       );
     };
 
     ws.onclose = (event) => {
       if (settled) return;
       settle(() => {
-        if (finalText) resolve(finalText);
+        if (finalText.value) resolve(finalText.value);
         else {
           reject(
             new AsrServiceError(
-              event.reason || `连接已关闭 (${event.code})`,
+              formatWsFailureMessage(event.code, event.reason),
               'WS',
             ),
           );
@@ -200,4 +226,189 @@ export async function transcribeViaWebSocket(
       });
     };
   });
+}
+
+async function transcribeViaNativeWebSocket(
+  authHeaders: VolcAsrAuthHeaders,
+  audioBuffer: ArrayBuffer,
+  requestPayload: AsrRequestPayload,
+): Promise<string> {
+  if (!Capacitor.isPluginAvailable('HeaderWebSocket')) {
+    throw new AsrServiceError(
+      '原生 WebSocket 插件未加载，请重新安装最新 APK',
+      'WS',
+    );
+  }
+
+  const wsUrl = buildNativeWebSocketUrl();
+  const headers = volcHeadersToRecord(authHeaders);
+
+  let socketId = '';
+  const listeners: PluginListenerHandle[] = [];
+  const finalText = { value: '' };
+
+  const cleanup = async () => {
+    await Promise.all(listeners.map((l) => l.remove()));
+    if (socketId) {
+      try {
+        await HeaderWebSocket.close({ socketId });
+      } catch {
+        /* already closed */
+      }
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      void cleanup().finally(fn);
+    };
+
+    const timeoutId = setTimeout(() => {
+      settle(() => reject(new AsrServiceError('语音识别超时', 'TIMEOUT')));
+    }, WS_TIMEOUT_MS);
+
+    void (async () => {
+      try {
+        const messageListener = await HeaderWebSocket.addListener(
+          'message',
+          async (event) => {
+            if (event.socketId !== socketId) return;
+            try {
+              const data = base64ToArrayBuffer(event.data);
+              const outcome = await handleServerPacket(data, finalText);
+              if (outcome === 'done') {
+                settle(() => {
+                  if (finalText.value) resolve(finalText.value);
+                  else reject(new AsrServiceError('识别结果为空', 'EMPTY'));
+                });
+              }
+            } catch (err) {
+              settle(() =>
+                reject(
+                  err instanceof AsrServiceError
+                    ? err
+                    : new AsrServiceError('解析识别结果失败', 'PARSE'),
+                ),
+              );
+            }
+          },
+        );
+        listeners.push(messageListener);
+
+        const closeListener = await HeaderWebSocket.addListener(
+          'close',
+          (event) => {
+            if (event.socketId !== socketId || settled) return;
+            settle(() => {
+              if (finalText.value) resolve(finalText.value);
+              else {
+                reject(
+                  new AsrServiceError(
+                    formatWsFailureMessage(event.code, event.reason),
+                    'WS',
+                  ),
+                );
+              }
+            });
+          },
+        );
+        listeners.push(closeListener);
+
+        const errorListener = await HeaderWebSocket.addListener(
+          'error',
+          (event) => {
+            if (event.socketId !== socketId || settled) return;
+            settle(() =>
+              reject(
+                new AsrServiceError(
+                  formatWsFailureMessage(event.code, event.message),
+                  'WS',
+                ),
+              ),
+            );
+          },
+        );
+        listeners.push(errorListener);
+
+        const { socketId: id } = await HeaderWebSocket.connect({
+          url: wsUrl,
+          headers,
+        });
+        socketId = id;
+
+        const fullFrame = await buildFullClientRequestFrame(
+          requestPayload as unknown as Record<string, unknown>,
+        );
+        await HeaderWebSocket.send({
+          socketId,
+          data: uint8ArrayToBase64(new Uint8Array(fullFrame)),
+        });
+
+        const audioFrame = await buildAudioRequestFrame(
+          new Uint8Array(audioBuffer),
+          true,
+        );
+        await HeaderWebSocket.send({
+          socketId,
+          data: uint8ArrayToBase64(new Uint8Array(audioFrame)),
+        });
+      } catch (err) {
+        settle(() =>
+          reject(
+            err instanceof AsrServiceError
+              ? err
+              : new AsrServiceError(
+                  err instanceof Error
+                    ? err.message
+                    : formatWsFailureMessage(),
+                  'WS',
+                ),
+          ),
+        );
+      }
+    })();
+  });
+}
+
+export async function transcribeViaWebSocket(
+  settings: AsrSettings,
+  audioBuffer: ArrayBuffer,
+  mimeType: string,
+): Promise<string> {
+  const apiKey = (await getAsrApiKey()) || settings.apiKey;
+  if (!apiKey || !settings.resourceId) {
+    throw new AsrServiceError('请配置 ASR API Key 与 Resource ID', 'CONFIG');
+  }
+
+  const requestId = generateUuid();
+  const auth = {
+    apiKey,
+    resourceId: settings.resourceId,
+    requestId,
+  };
+  const requestPayload = await buildAsrPayload(mimeType);
+  const authHeaders = buildNewConsoleAsrHeaders(auth);
+
+  if (Capacitor.isNativePlatform()) {
+    return transcribeViaNativeWebSocket(
+      authHeaders,
+      audioBuffer,
+      requestPayload,
+    );
+  }
+
+  if (!shouldUseAsrWebSocketProxy()) {
+    throw new AsrServiceError(
+      '浏览器生产构建无法直连火山 ASR，请使用 npm run dev 或安装 Android App',
+      'WS',
+    );
+  }
+
+  const wsUrl = buildBrowserProxyWebSocketUrl(auth);
+  return transcribeViaBrowserWebSocket(wsUrl, audioBuffer, requestPayload);
 }

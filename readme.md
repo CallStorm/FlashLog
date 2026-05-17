@@ -395,8 +395,9 @@ curl https://ark.cn-beijing.volces.com/api/v3/chat/completions \
 
 实现提示：单包音频约 100~200ms，发包间隔 100~200ms；双向流式单包 200ms 时性能较优。鉴权头见官方文档（新版 `X-Api-Key` + `X-Api-Resource-Id` 等）。
 
-- **MVP**：录音文件 → 火山 HTTP 识别（以控制台当前 HTTP 文档为准）。
-- **V1.1**：按上表 WebSocket 接入流式 ASR。
+- **浏览器开发**（`npm run dev`）：WebSocket 经 Vite 代理 `/api/openspeech-ws`，将 Query 转为握手 Header。
+- **Android App**：通过原生 `HeaderWebSocket` 插件（OkHttp）直连火山，鉴权写入握手 Header。
+- **MVP**：录音结束后 WebSocket `bigmodel_nostream` 识别（见 `asrWs.ts`）。
 
 ### 10.4 目录建议（实现阶段）
 

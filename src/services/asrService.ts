@@ -5,6 +5,10 @@ import {
   encodeBlobAsPcm16kMono,
   needsPcmConversion,
 } from '@/utils/audioPcm';
+import {
+  ensureMicrophonePermission,
+  micPermissionMessage,
+} from '@/utils/microphonePermission';
 
 export { AsrServiceError } from '@/services/asrErrors';
 
@@ -23,10 +27,42 @@ export class RecordingSession {
       throw new AsrServiceError('当前环境不支持录音', 'UNSUPPORTED');
     }
 
+    const micPerm = await ensureMicrophonePermission();
+    if (!micPerm.ok) {
+      throw new AsrServiceError(micPermissionMessage(micPerm), 'PERMISSION');
+    }
+
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      throw new AsrServiceError('无法访问麦克风，请在系统设置中授权', 'PERMISSION');
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        const retry = await ensureMicrophonePermission();
+        if (!retry.ok) {
+          throw new AsrServiceError(micPermissionMessage(retry), 'PERMISSION');
+        }
+        try {
+          this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch {
+          throw new AsrServiceError(micPermissionMessage(retry), 'PERMISSION');
+        }
+      } else if (name === 'NotFoundError') {
+        throw new AsrServiceError('未检测到麦克风设备', 'UNSUPPORTED');
+      } else {
+        throw new AsrServiceError(
+          '无法访问麦克风，请检查系统权限后重试',
+          'PERMISSION',
+        );
+      }
+    }
+
+    if (!this.stream) {
+      throw new AsrServiceError('无法访问麦克风', 'PERMISSION');
     }
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
