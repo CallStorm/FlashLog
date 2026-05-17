@@ -118,61 +118,70 @@ export function History() {
 
   if (selectedDate) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
-        <button
-          type="button"
-          onClick={() => setSelectedDate(null)}
-          className="flex items-center gap-1 text-sm text-secondary"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          返回
-        </button>
-        <h2 className="text-lg font-medium text-primary">
-          {formatDateLabel(selectedDate)}
-          <span className="ml-2 text-sm font-normal text-muted">
-            {selectedDate}
-          </span>
-        </h2>
+      <div className="mx-auto max-w-lg px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
+        <header className="flex items-start gap-1">
+          <button
+            type="button"
+            onClick={() => setSelectedDate(null)}
+            className="-ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-[var(--color-icon-hover)]"
+            aria-label="返回"
+          >
+            <ChevronLeft className="h-5 w-5 stroke-[2]" />
+          </button>
+          <div className="min-w-0 flex-1 pb-1 pt-1.5">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <h1 className="text-2xl font-bold tracking-tight text-primary">
+                {formatDateLabel(selectedDate)}
+              </h1>
+              <span className="text-sm text-muted">{selectedDate}</span>
+            </div>
+          </div>
+        </header>
 
         {dayItems.length === 0 ? (
-          <p className="text-sm text-muted">该日无记录</p>
+          <p className="mt-8 text-sm text-muted">该日无记录</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="mt-6 space-y-4">
             {dayItems.map((item) => (
-              <li key={item.id} className="card-surface p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-medium text-primary">{item.title}</h3>
-                    <p className="mt-1 text-sm badge-duration">
-                      {formatDuration(item.durationMinutes)}
+              <li key={item.id} className="work-log-list-card">
+                <span className="work-log-duration-badge absolute right-4 top-4">
+                  {formatDuration(item.durationMinutes)}
+                </span>
+
+                <div className="pr-14">
+                  <h3 className="font-semibold text-primary">{item.title}</h3>
+                  {item.description ? (
+                    <p className="mt-1.5 text-sm leading-relaxed text-secondary">
+                      {item.description}
                     </p>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(item)}
-                      className="icon-btn"
-                      aria-label="编辑"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete(item.id)}
-                      className={`icon-btn icon-btn-danger ${
-                        deleteId === item.id ? 'bg-[rgba(234,67,53,0.12)]' : ''
-                      }`}
-                      aria-label="删除"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  ) : null}
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-secondary">
-                  {item.description}
-                </p>
+
+                <div className="mt-3 flex items-center justify-end gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(item)}
+                    className="work-log-action-btn work-log-action-btn-edit"
+                    aria-label="编辑"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(item.id)}
+                    className={`work-log-action-btn work-log-action-btn-delete ${
+                      deleteId === item.id ? 'work-log-action-btn-delete-active' : ''
+                    }`}
+                    aria-label="删除"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
                 {deleteId === item.id && (
-                  <p className="mt-2 text-xs text-[#ea4335]">再次点击确认删除</p>
+                  <p className="mt-1.5 text-right text-xs text-[#ea4335]">
+                    再次点击确认删除
+                  </p>
                 )}
               </li>
             ))}

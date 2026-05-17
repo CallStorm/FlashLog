@@ -381,6 +381,62 @@
     background-clip: unset;
   }
 
+  .work-log-list-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background-color: var(--color-bg-elevated);
+    box-shadow: 0 1px 2px 0 rgb(60 64 67 / 0.06);
+    border-left: 3px solid var(--color-card-accent);
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  [data-theme='dark'] .work-log-list-card {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+  }
+
+  .work-log-duration-badge {
+    border-radius: 9999px;
+    background-color: var(--color-nav-active-bg);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    color: var(--color-accent);
+  }
+
+  .work-log-action-btn {
+    border-radius: 0.5rem;
+    padding: 0.375rem;
+    color: #d1d5db;
+    transition:
+      background-color 0.15s,
+      color 0.15s;
+  }
+
+  [data-theme='dark'] .work-log-action-btn {
+    color: #5f6368;
+  }
+
+  .work-log-action-btn-edit:hover {
+    background-color: var(--color-nav-active-bg);
+    color: var(--color-accent);
+  }
+
+  .work-log-action-btn-delete:hover {
+    background-color: rgba(234, 67, 53, 0.12);
+    color: #ea4335;
+  }
+
+  [data-theme='dark'] .work-log-action-btn-delete:hover {
+    color: #f28b82;
+  }
+
+  .work-log-action-btn-delete-active {
+    background-color: rgba(234, 67, 53, 0.12);
+    color: #ea4335;
+  }
+
   .banner-info {
     width: 100%;
     border-radius: 0.75rem;
