@@ -19,18 +19,15 @@ export function Toast({
     return () => clearTimeout(t);
   }, [durationMs, onClose, message]);
 
-  const colors =
+  const variantClass =
     variant === 'error'
-      ? 'border-red-500/40 bg-red-950/90 text-red-100'
+      ? 'toast-error'
       : variant === 'success'
-        ? 'border-emerald-500/40 bg-emerald-950/90 text-emerald-100'
-        : 'border-amber-500/40 bg-stone-900/95 text-stone-100';
+        ? 'toast-success'
+        : 'toast-info';
 
   return (
-    <div
-      className={`fixed left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] z-[100] flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg backdrop-blur ${colors}`}
-      role="status"
-    >
+    <div className={`toast-root ${variantClass}`} role="status">
       <p className="flex-1 text-sm leading-relaxed">{message}</p>
       <button
         type="button"

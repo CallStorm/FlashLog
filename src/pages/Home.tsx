@@ -13,7 +13,7 @@ import {
 } from '@/services/asrService';
 import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { getTodayLocal } from '@/utils/date';
+import { formatDateLabel, getTodayLocal } from '@/utils/date';
 import { parseWorkLogCard } from '@/utils/jsonCard';
 export function Home() {
   const navigate = useNavigate();
@@ -49,6 +49,7 @@ export function Home() {
 
   const today = getTodayLocal();
   const refDate = today;
+  const inputPlaceholder = `记录${formatDateLabel(refDate)}（${refDate}）的工作；口述可说「昨天」等指定其他日期…`;
 
   useEffect(() => {
     void (async () => {
@@ -220,46 +221,43 @@ export function Home() {
 
   if (!loaded) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center text-stone-500">
+      <div className="flex min-h-[50vh] items-center justify-center text-muted">
         加载中…
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
+    <div className="mx-auto max-w-lg space-y-3 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
       <header>
-        <h1 className="text-xl font-semibold text-stone-50">工作记录</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          参考日期 <span className="text-amber-400">{refDate}</span>
-          <span className="mx-1">·</span>
-          默认记录今天，口述可指定其他日期
-        </p>
+        <h1 className="page-title">工作记录</h1>
       </header>
 
       {!llmKeyConfigured && (
         <button
           type="button"
           onClick={() => navigate('/settings')}
-          className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left text-sm text-amber-200"
+          className="banner-info"
         >
           未配置 LLM API Key，AI 总结不可用。可手动填写卡片保存，或前往设置配置。
         </button>
       )}
 
-      <textarea
-        value={draftText}
-        onChange={(e) => setDraftText(e.target.value)}
-        disabled={status === 'recording' || status === 'transcribing'}
-        placeholder="描述今日工作内容，或按住麦克风口述…"
-        rows={6}
-        className="input-field resize-none leading-relaxed"
-      />
+      <div className="card-surface input-composer">
+        <textarea
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+          disabled={status === 'recording' || status === 'transcribing'}
+          placeholder={inputPlaceholder}
+          rows={5}
+          className="input-field-embedded"
+        />
+      </div>
 
       {status === 'streaming' && (
-        <div className="rounded-2xl border border-stone-700 bg-stone-900/60 p-4">
-          <p className="mb-2 text-xs text-amber-400">AI 总结中…</p>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-300">
+        <div className="card-surface p-4">
+          <p className="mb-2 text-xs font-medium text-accent">AI 总结中…</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-secondary">
             {streamText || '等待响应…'}
             <span className="animate-pulse">▌</span>
           </p>
@@ -280,7 +278,7 @@ export function Home() {
             </div>
           )}
           <label className="block space-y-1">
-            <span className="text-xs text-stone-400">补充说明（再次 AI 总结将合并覆盖预览卡片）</span>
+            <span className="label-field">补充说明（再次 AI 总结将合并覆盖预览卡片）</span>
             <textarea
               value={supplementText}
               onChange={(e) => setSupplementText(e.target.value)}
@@ -301,8 +299,8 @@ export function Home() {
             if (status === 'recording') void handleMicUp();
           }}
           disabled={status === 'transcribing' || status === 'streaming'}
-          className={`btn-icon flex-1 ${
-            status === 'recording' ? 'bg-red-500/20 text-red-400' : ''
+          className={`btn-ghost-action ${
+            status === 'recording' ? 'btn-ghost-recording' : ''
           }`}
         >
           {status === 'recording' || status === 'transcribing' ? (
@@ -310,20 +308,18 @@ export function Home() {
           ) : (
             <Mic className="h-5 w-5" />
           )}
-          <span className="text-xs">
-            {status === 'recording'
-              ? `录音中 ${Math.floor((recordingRef.current?.getElapsedMs() ?? 0) / 1000)}s`
-              : status === 'transcribing'
-                ? '转写中'
-                : '按住说话'}
-          </span>
+          {status === 'recording'
+            ? `录音中 ${Math.floor((recordingRef.current?.getElapsedMs() ?? 0) / 1000)}s`
+            : status === 'transcribing'
+              ? '转写中'
+              : '按住说话'}
         </button>
 
         <button
           type="button"
           onClick={() => void handleAiSummarize()}
           disabled={!canAiSummarize}
-          className="btn-primary flex-[1.2]"
+          className="btn-gemini flex-1"
         >
           {status === 'streaming' ? (
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -344,7 +340,7 @@ export function Home() {
       {status === 'recording' &&
         (recordingRef.current?.isNearLimit() ||
           (recordingRef.current?.getElapsedMs() ?? 0) > MAX_RECORD_MS - 30_000) && (
-          <p className="text-center text-xs text-amber-500">即将达到 3 分钟录音上限</p>
+          <p className="text-center text-xs text-accent">即将达到 3 分钟录音上限</p>
         )}
 
       {!llmKeyConfigured && !card && draftText.trim() && (

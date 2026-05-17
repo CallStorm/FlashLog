@@ -6,10 +6,12 @@ import { clearAllWorkLogs } from '@/db/workLogRepository';
 import { maskSecret } from '@/services/secureConfig';
 import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useThemeStore } from '@/stores/themeStore';
 import { Toast } from '@/components/Toast';
 
 export function Settings() {
   const navigate = useNavigate();
+  const { theme, setTheme } = useThemeStore();
   const {
     settings,
     loaded,
@@ -35,7 +37,7 @@ export function Settings() {
 
   if (!loaded) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center text-stone-500">
+      <div className="flex min-h-[50vh] items-center justify-center text-muted">
         加载中…
       </div>
     );
@@ -67,19 +69,40 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
       <header>
-        <h1 className="text-xl font-semibold text-stone-50">设置</h1>
-        <p className="mt-1 text-sm text-stone-500">
+        <h1 className="page-title">设置</h1>
+        <p className="mt-1 text-sm text-muted">
           API 调用费用由您自行承担，密钥仅存于本机安全存储。
         </p>
       </header>
+      <section className="card-surface space-y-3 p-4">
+        <h2 className="section-title">外观</h2>
+        <p className="text-xs text-muted">选择界面配色，将记住您的选择</p>
+        <div className="theme-segment" role="group" aria-label="主题">
+          <button
+            type="button"
+            onClick={() => setTheme('light')}
+            className={`theme-segment-btn ${theme === 'light' ? 'theme-segment-btn-active' : ''}`}
+          >
+            浅色
+          </button>
+          <button
+            type="button"
+            onClick={() => setTheme('dark')}
+            className={`theme-segment-btn ${theme === 'dark' ? 'theme-segment-btn-active' : ''}`}
+          >
+            深色
+          </button>
+        </div>
+      </section>
 
-      <section className="space-y-3 rounded-2xl border border-stone-800 bg-stone-900/50 p-4">
+
+      <section className="card-surface space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-medium text-amber-400">LLM · 火山方舟</h2>
+          <h2 className="section-title">LLM · 火山方舟</h2>
           <button
             type="button"
             onClick={() => void restoreLlmDefaults()}
-            className="flex items-center gap-1 text-xs text-stone-400 hover:text-amber-400"
+            className="flex items-center gap-1 text-xs text-secondary hover:text-accent"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             恢复火山默认
@@ -87,7 +110,7 @@ export function Settings() {
         </div>
 
         <label className="block space-y-1">
-          <span className="text-xs text-stone-400">API Base URL</span>
+          <span className="label-field">API Base URL</span>
           <input
             value={settings.llm.baseUrl}
             onChange={(e) => void updateLlm({ baseUrl: e.target.value })}
@@ -96,7 +119,7 @@ export function Settings() {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-xs text-stone-400">API Key（脱敏存储）</span>
+          <span className="label-field">API Key（脱敏存储）</span>
           <div className="flex gap-2">
             <input
               type="password"
@@ -113,7 +136,7 @@ export function Settings() {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-xs text-stone-400">Model / Endpoint ID（必填）</span>
+          <span className="label-field">Model / Endpoint ID（必填）</span>
           <input
             value={settings.llm.model}
             onChange={(e) => void updateLlm({ model: e.target.value })}
@@ -124,11 +147,11 @@ export function Settings() {
 
         <label className="block space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-stone-400">System Prompt</span>
+            <span className="label-field">System Prompt</span>
             <button
               type="button"
               onClick={() => void restoreSystemPrompt()}
-              className="text-xs text-stone-500 hover:text-amber-400"
+              className="text-xs text-muted hover:text-accent"
             >
               恢复默认
             </button>
@@ -142,22 +165,22 @@ export function Settings() {
         </label>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-stone-800 bg-stone-900/50 p-4">
-        <h2 className="font-medium text-amber-400">ASR · 火山豆包语音</h2>
-        <p className="text-xs text-stone-500">
+      <section className="card-surface space-y-3 p-4">
+        <h2 className="section-title">ASR · 火山豆包语音</h2>
+        <p className="text-xs text-muted">
           新版控制台鉴权，见{' '}
           <a
             href="https://www.volcengine.com/docs/6561/1354869?lang=zh"
             target="_blank"
             rel="noreferrer"
-            className="text-amber-500/80 underline"
+            className="link-accent"
           >
             大模型流式语音识别
           </a>
         </p>
 
         <label className="block space-y-1">
-          <span className="text-xs text-stone-400">API Key（X-Api-Key）</span>
+          <span className="label-field">API Key（X-Api-Key）</span>
           <div className="flex gap-2">
             <input
               type="password"
@@ -173,7 +196,7 @@ export function Settings() {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-xs text-stone-400">Resource ID（X-Api-Resource-Id）</span>
+          <span className="label-field">Resource ID（X-Api-Resource-Id）</span>
           <input
             value={settings.asr.resourceId}
             onChange={(e) => void updateAsr({ resourceId: e.target.value })}
@@ -183,8 +206,8 @@ export function Settings() {
         </label>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-stone-800 bg-stone-900/50 p-4 opacity-60">
-        <h2 className="font-medium text-stone-400">定时提醒（V1.1 预留）</h2>
+      <section className="card-surface space-y-3 p-4 opacity-60">
+        <h2 className="font-medium text-secondary">定时提醒（V1.1 预留）</h2>
         <label className="flex items-center gap-3">
           <input
             type="checkbox"
@@ -195,9 +218,9 @@ export function Settings() {
               })
             }
             disabled
-            className="h-4 w-4 rounded border-stone-600"
+            className="h-4 w-4 rounded border-[var(--color-border)]"
           />
-          <span className="text-sm text-stone-500">每天 {settings.reminder.time} 提醒</span>
+          <span className="text-sm text-muted">每天 {settings.reminder.time} 提醒</span>
         </label>
       </section>
 
@@ -205,16 +228,12 @@ export function Settings() {
         <button
           type="button"
           onClick={() => void handleClearData()}
-          className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm ${
-            confirmClear
-              ? 'border-red-500 bg-red-950/50 text-red-200'
-              : 'border-stone-700 text-stone-400'
-          }`}
+          className={`btn-danger-outline ${confirmClear ? 'btn-danger-confirm' : ''}`}
         >
           <Trash2 className="h-4 w-4" />
           {confirmClear ? '再次点击确认清除所有工时与草稿' : '清除所有本地数据'}
         </button>
-        <p className="text-center text-xs text-stone-600">不会清除已保存的 API Key</p>
+        <p className="text-center text-xs text-muted">不会清除已保存的 API Key</p>
       </section>
 
       <button type="button" onClick={() => navigate('/')} className="btn-primary w-full">
