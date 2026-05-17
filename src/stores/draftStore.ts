@@ -98,10 +98,10 @@ export const useDraftStore = create<DraftState>((set, get) => ({
     }),
 
   persistDraft: async () => {
-    const { draftText, supplementText, card, referenceDate } = get();
+    const { draftText, supplementText, card } = get();
     await Preferences.set({
       key: DRAFT_KEY,
-      value: JSON.stringify({ draftText, supplementText, card, referenceDate }),
+      value: JSON.stringify({ draftText, supplementText, card }),
     });
   },
 
@@ -113,13 +113,11 @@ export const useDraftStore = create<DraftState>((set, get) => ({
         draftText?: string;
         supplementText?: string;
         card?: WorkLogCardDraft | null;
-        referenceDate?: string;
       };
       set({
         draftText: data.draftText ?? '',
         supplementText: data.supplementText ?? '',
         card: data.card ?? null,
-        referenceDate: data.referenceDate ?? '',
         status: data.card
           ? 'cardReview'
           : data.draftText?.trim()

@@ -26,7 +26,6 @@ export function Home() {
     card,
     supplementText,
     supplementHistory,
-    referenceDate,
     setStatus,
     setDraftText,
     appendDraftText,
@@ -49,13 +48,15 @@ export function Home() {
   const abortRef = useRef<AbortController | null>(null);
 
   const today = getTodayLocal();
-  const refDate = referenceDate || today;
+  const refDate = today;
 
   useEffect(() => {
-    void load();
-    void loadDraft();
-    setReferenceDate(today);
-  }, [load, loadDraft, setReferenceDate, today]);
+    void (async () => {
+      await load();
+      await loadDraft();
+      setReferenceDate(getTodayLocal());
+    })();
+  }, [load, loadDraft, setReferenceDate]);
 
   useEffect(() => {
     const t = setTimeout(() => void persistDraft(), 500);
