@@ -2,7 +2,10 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { syncReminderSchedule } from '@/services/reminderService';
+import {
+  shouldRescheduleReminders,
+  syncReminderSchedule,
+} from '@/services/reminderService';
 import { usePendingStore } from '@/stores/pendingStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -41,7 +44,10 @@ export function ReminderHost() {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       void refreshPending();
-      if (reminder.enabled) void syncReminderSchedule(reminder);
+      if (!reminder.enabled) return;
+      void shouldRescheduleReminders(true).then((needs) => {
+        if (needs) void syncReminderSchedule(reminder);
+      });
     };
     document.addEventListener('visibilitychange', onVisible);
 

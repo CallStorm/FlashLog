@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RotateCcw, Trash2 } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
 import { DEFAULT_SETTINGS } from '@/constants/defaults';
-import { REMINDER_COPY, SETTINGS_COPY } from '@/constants/settingsCopy';
 import { clearAllWorkLogs } from '@/db/workLogRepository';
 import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -11,11 +9,8 @@ import { useThemeStore } from '@/stores/themeStore';
 import { Toast } from '@/components/Toast';
 import { resetTrackingStartDate } from '@/services/pendingWorklogService';
 import {
-  getReminderDiagnostics,
-  requestExactAlarmPermission,
   requestReminderPermission,
   syncReminderSchedule,
-  type ReminderDiagnostics,
 } from '@/services/reminderService';
 import { refreshPendingWorklogs } from '@/utils/refreshPending';
 import type { ReminderRepeat } from '@/types/settings';
@@ -42,103 +37,57 @@ export function Settings() {
   const [asrKeyInput, setAsrKeyInput] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [reminderDiag, setReminderDiag] = useState<ReminderDiagnostics | null>(
-    null,
-  );
 
   const reminderTimeForInput =
     settings.reminder.time.length >= 5 ? settings.reminder.time : '18:00';
-
-  const refreshReminderDiag = async () => {
-    if (!Capacitor.isNativePlatform()) return;
-    setReminderDiag(await getReminderDiagnostics());
-  };
 
   const handleReminderToggle = async (enabled: boolean) => {
     if (enabled) {
       const granted = await requestReminderPermission();
       if (!granted) {
-        setToast(REMINDER_COPY.permissionDenied);
-        void refreshReminderDiag();
+        setToast('璇峰湪绯荤粺璁剧疆涓厑璁搁€氱煡鏉冮檺');
         return;
       }
     }
-    const result = await updateSettings({
+    await updateSettings({
       reminder: { ...settings.reminder, enabled },
     });
-    void refreshReminderDiag();
-    if (enabled && result && !result.ok) {
-      setToast(result.reason);
-      return;
-    }
-    setToast(enabled ? REMINDER_COPY.enabled : REMINDER_COPY.disabled);
+    setToast(enabled ? '宸插紑鍚畾鏃舵彁閱? : '宸插叧闂畾鏃舵彁閱?);
   };
 
   const handleReminderTimeChange = (value: string) => {
-    void (async () => {
-      const result = await updateSettings({
-        reminder: { ...settings.reminder, time: value || '18:00' },
-      });
-      void refreshReminderDiag();
-      if (result && !result.ok) setToast(result.reason);
-    })();
+    void updateSettings({
+      reminder: { ...settings.reminder, time: value || '18:00' },
+    });
   };
 
   const handleReminderRepeat = (repeat: ReminderRepeat) => {
-    void (async () => {
-      const result = await updateSettings({
-        reminder: { ...settings.reminder, repeat },
-      });
-      void refreshReminderDiag();
-      if (result && !result.ok) setToast(result.reason);
-    })();
-  };
-
-  const handleOpenExactAlarmSettings = () => {
-    void (async () => {
-      await requestExactAlarmPermission();
-      void refreshReminderDiag();
-      const result = await syncReminderSchedule(settings.reminder);
-      if (!result.ok) setToast(result.reason);
-      else if (settings.reminder.enabled) setToast(REMINDER_COPY.rescheduled);
-    })();
+    void updateSettings({
+      reminder: { ...settings.reminder, repeat },
+    });
   };
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!loaded || !settings.reminder.enabled) {
-      setReminderDiag(null);
-      return;
-    }
-    void refreshReminderDiag();
-  }, [
-    loaded,
-    settings.reminder.enabled,
-    settings.reminder.time,
-    settings.reminder.repeat,
-  ]);
-
   if (!loaded) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-muted">
-        {SETTINGS_COPY.loading}
-      </div>
+        鍔犺浇涓€?      </div>
     );
   }
 
   const handleSaveLlmKey = async () => {
     await setLlmApiKeyValue(llmKeyInput.trim());
     setLlmKeyInput('');
-    setToast(SETTINGS_COPY.llmKeySaved);
+    setToast('LLM API Key 宸蹭繚瀛?);
   };
 
   const handleSaveAsrKey = async () => {
     await setAsrApiKeyValue(asrKeyInput.trim());
     setAsrKeyInput('');
-    setToast(SETTINGS_COPY.asrKeySaved);
+    setToast('ASR API Key 宸蹭繚瀛?);
   };
 
   const handleClearData = async () => {
@@ -154,47 +103,48 @@ export function Settings() {
       await syncReminderSchedule(settings.reminder);
     }
     setConfirmClear(false);
-    setToast(SETTINGS_COPY.dataCleared);
+    setToast('鏈湴宸ユ椂涓庤崏绋垮凡娓呴櫎');
   };
 
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
       <header>
-        <h1 className="page-title">{SETTINGS_COPY.pageTitle}</h1>
-        <p className="mt-1 text-sm text-muted">{SETTINGS_COPY.pageSubtitle}</p>
+        <h1 className="page-title">璁剧疆</h1>
+        <p className="mt-1 text-sm text-muted">
+          API 璋冪敤璐圭敤鐢辨偍鑷鎵挎媴锛屽瘑閽ヤ粎瀛樹簬鏈満瀹夊叏瀛樺偍銆?        </p>
       </header>
 
       <section className="card-surface space-y-3 p-4">
-        <h2 className="section-title">{SETTINGS_COPY.appearanceTitle}</h2>
-        <p className="text-xs text-muted">{SETTINGS_COPY.appearanceHint}</p>
-        <div className="theme-segment" role="group" aria-label={SETTINGS_COPY.themeGroup}>
+        <h2 className="section-title">澶栬</h2>
+        <p className="text-xs text-muted">閫夋嫨鐣岄潰閰嶈壊锛屽皢璁颁綇鎮ㄧ殑閫夋嫨</p>
+        <div className="theme-segment" role="group" aria-label="涓婚">
           <button
             type="button"
             onClick={() => setTheme('light')}
             className={`theme-segment-btn ${theme === 'light' ? 'theme-segment-btn-active' : ''}`}
           >
-            {SETTINGS_COPY.themeLight}
+            娴呰壊
           </button>
           <button
             type="button"
             onClick={() => setTheme('dark')}
             className={`theme-segment-btn ${theme === 'dark' ? 'theme-segment-btn-active' : ''}`}
           >
-            {SETTINGS_COPY.themeDark}
+            娣辫壊
           </button>
         </div>
       </section>
 
       <section className="card-surface space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="section-title">{SETTINGS_COPY.llmTitle}</h2>
+          <h2 className="section-title">LLM 路 鐏北鏂硅垷</h2>
           <button
             type="button"
             onClick={() => void restoreLlmDefaults()}
             className="flex items-center gap-1 text-xs text-secondary hover:text-accent"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            {SETTINGS_COPY.restoreVolcDefaults}
+            鎭㈠鐏北榛樿
           </button>
         </div>
 
@@ -208,21 +158,17 @@ export function Settings() {
         </label>
 
         <div className="block space-y-1">
-          <span className="label-field">{SETTINGS_COPY.apiKeyLabel}</span>
+          <span className="label-field">API Key锛堣劚鏁忓瓨鍌級</span>
           <input
             type="password"
             value={llmKeyInput}
             onChange={(e) => setLlmKeyInput(e.target.value)}
-            placeholder={
-              llmKeyConfigured
-                ? SETTINGS_COPY.apiKeyPlaceholderNew
-                : SETTINGS_COPY.apiKeyPlaceholder
-            }
+            placeholder={llmKeyConfigured ? '杈撳叆鏂?Key 瑕嗙洊' : '杈撳叆 API Key'}
             className="input-field w-full"
             autoComplete="off"
           />
           {llmKeyConfigured && (
-            <p className="text-xs text-muted">{SETTINGS_COPY.apiKeySavedHint}</p>
+            <p className="text-xs text-muted">宸蹭繚瀛?Key锛岃緭鍏ユ柊鍊煎彲瑕嗙洊</p>
           )}
           <button
             type="button"
@@ -230,51 +176,46 @@ export function Settings() {
             disabled={!llmKeyInput.trim()}
             className="btn-secondary mt-2 w-full"
           >
-            {SETTINGS_COPY.save}
+            淇濆瓨
           </button>
         </div>
 
         <label className="block space-y-1">
-          <span className="label-field">{SETTINGS_COPY.modelLabel}</span>
+          <span className="label-field">Model / Endpoint ID锛堝繀濉級</span>
           <input
             value={settings.llm.model}
             onChange={(e) => void updateLlm({ model: e.target.value })}
-            placeholder={SETTINGS_COPY.modelPlaceholder}
+            placeholder="ep-xxxxxxxx 鎴?doubao-1-5-pro-32k-250115"
             className="input-field"
           />
         </label>
       </section>
 
       <section className="card-surface space-y-3 p-4">
-        <h2 className="section-title">{SETTINGS_COPY.asrTitle}</h2>
+        <h2 className="section-title">ASR 路 鐏北璞嗗寘璇煶</h2>
         <p className="text-xs text-muted">
-          {SETTINGS_COPY.asrAuthHint}{' '}
+          鏂扮増鎺у埗鍙伴壌鏉冿紝瑙亄' '}
           <a
             href="https://www.volcengine.com/docs/6561/1354869?lang=zh"
             target="_blank"
             rel="noreferrer"
             className="link-accent"
           >
-            {SETTINGS_COPY.asrDocLink}
-          </a>
+            澶фā鍨嬫祦寮忚闊宠瘑鍒?          </a>
         </p>
 
         <div className="block space-y-1">
-          <span className="label-field">{SETTINGS_COPY.asrKeyLabel}</span>
+          <span className="label-field">API Key锛圶-Api-Key锛?/span>
           <input
             type="password"
             value={asrKeyInput}
             onChange={(e) => setAsrKeyInput(e.target.value)}
-            placeholder={
-              asrConfigured
-                ? SETTINGS_COPY.apiKeyPlaceholderNew
-                : SETTINGS_COPY.apiKeyPlaceholder
-            }
+            placeholder={asrConfigured ? '杈撳叆鏂?Key 瑕嗙洊' : '杈撳叆 API Key'}
             className="input-field w-full"
             autoComplete="off"
           />
           {asrConfigured && (
-            <p className="text-xs text-muted">{SETTINGS_COPY.apiKeySavedHint}</p>
+            <p className="text-xs text-muted">宸蹭繚瀛?Key锛岃緭鍏ユ柊鍊煎彲瑕嗙洊</p>
           )}
           <button
             type="button"
@@ -282,12 +223,12 @@ export function Settings() {
             disabled={!asrKeyInput.trim()}
             className="btn-secondary mt-2 w-full"
           >
-            {SETTINGS_COPY.save}
+            淇濆瓨
           </button>
         </div>
 
         <label className="block space-y-1">
-          <span className="label-field">{SETTINGS_COPY.resourceIdLabel}</span>
+          <span className="label-field">Resource ID锛圶-Api-Resource-Id锛?/span>
           <input
             value={settings.asr.resourceId}
             onChange={(e) => void updateAsr({ resourceId: e.target.value })}
@@ -298,40 +239,13 @@ export function Settings() {
       </section>
 
       <section className="card-surface space-y-3 p-4">
-        <h2 className="section-title">{REMINDER_COPY.sectionTitle}</h2>
-        <p className="text-xs text-muted">{REMINDER_COPY.intro}</p>
-        <p className="text-xs text-muted">{REMINDER_COPY.repeatHint}</p>
-        {settings.reminder.enabled && reminderDiag && (
-          <div className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs text-secondary space-y-1">
-            <p>
-              {REMINDER_COPY.notificationPermission}
-              {REMINDER_COPY.colon}
-              {reminderDiag.notificationGranted
-                ? REMINDER_COPY.granted
-                : REMINDER_COPY.denied}
-            </p>
-            <p>
-              {REMINDER_COPY.exactAlarmPermission}
-              {REMINDER_COPY.colon}
-              {reminderDiag.exactAlarmGranted
-                ? REMINDER_COPY.granted
-                : REMINDER_COPY.denied}
-            </p>
-            <p>{REMINDER_COPY.pendingCount(reminderDiag.pendingCount)}</p>
-            {reminderDiag.nextFireAt && (
-              <p>{REMINDER_COPY.nextFire(reminderDiag.nextFireAt)}</p>
-            )}
-            {!reminderDiag.exactAlarmGranted && (
-              <button
-                type="button"
-                onClick={handleOpenExactAlarmSettings}
-                className="mt-1 text-accent underline"
-              >
-                {REMINDER_COPY.openExactAlarm}
-              </button>
-            )}
-          </div>
-        )}
+        <h2 className="section-title">瀹氭椂鎻愰啋</h2>
+        <p className="text-xs text-muted">
+          鍒扮偣鐢辩郴缁熸帹閫佹湰鍦伴€氱煡锛屾棤闇€淇濇寔 App 鎵撳紑锛涜鍏佽閫氱煡鏉冮檺锛岄儴鍒嗘満鍨嬭繕闇€鍏佽銆岄椆閽熶笌鎻愰啋銆嶅苟鍏抽棴鐪佺數闄愬埗銆?        </p>
+        <p className="text-xs text-muted">
+          銆屾秷鎭€峊ab 涓殑寰呭姙涓烘湭濉伐鏃剁殑娉曞畾宸ヤ綔鏃ュ垪琛紝涓庨€氱煡鐙珛锛涙竻绌烘湰鍦版暟鎹悗寰呭姙浠庝粖鏃ラ噸鏂扮粺璁★紙鑻ヤ粖鏃ラ潪宸ヤ綔鏃ワ紝鍒楄〃鍙兘涓虹┖锛夈€?        </p>
+        <p className="text-xs text-muted">
+          銆屽伐浣滄棩銆嶆寜涓浗娉曞畾宸ヤ綔鏃ユ帓绋嬶紙鍛ㄦ湯/鑺傚亣鏃ヤ笉鎺ㄩ€侊級锛涖€屾瘡澶┿€嶅惈鍛ㄦ湯銆傛墦寮€ App 鏃朵細鑷姩琛ユ帓鏈潵鎻愰啋銆?        </p>
         <label className="flex items-center gap-3">
           <input
             type="checkbox"
@@ -339,10 +253,10 @@ export function Settings() {
             onChange={(e) => void handleReminderToggle(e.target.checked)}
             className="h-4 w-4 rounded border-[var(--color-border)]"
           />
-          <span className="text-sm text-secondary">{REMINDER_COPY.toggleLabel}</span>
+          <span className="text-sm text-secondary">寮€鍚彁閱?/span>
         </label>
         <label className="block space-y-1">
-          <span className="label-field">{REMINDER_COPY.timeLabel}</span>
+          <span className="label-field">鎻愰啋鏃堕棿</span>
           <input
             type="time"
             value={reminderTimeForInput}
@@ -352,23 +266,22 @@ export function Settings() {
           />
         </label>
         <div className="space-y-2">
-          <span className="label-field block">{REMINDER_COPY.repeatLabel}</span>
-          <div className="theme-segment" role="group" aria-label={REMINDER_COPY.repeatGroup}>
+          <span className="label-field block">閲嶅</span>
+          <div className="theme-segment" role="group" aria-label="鎻愰啋閲嶅">
             <button
               type="button"
               disabled={!settings.reminder.enabled}
               onClick={() => handleReminderRepeat('weekdays')}
               className={`theme-segment-btn ${settings.reminder.repeat === 'weekdays' ? 'theme-segment-btn-active' : ''}`}
             >
-              {REMINDER_COPY.weekdays}
-            </button>
+              宸ヤ綔鏃?            </button>
             <button
               type="button"
               disabled={!settings.reminder.enabled}
               onClick={() => handleReminderRepeat('daily')}
               className={`theme-segment-btn ${settings.reminder.repeat === 'daily' ? 'theme-segment-btn-active' : ''}`}
             >
-              {REMINDER_COPY.daily}
+              姣忓ぉ
             </button>
           </div>
         </div>
@@ -381,9 +294,12 @@ export function Settings() {
           className={`btn-danger-outline ${confirmClear ? 'btn-danger-confirm' : ''}`}
         >
           <Trash2 className="h-4 w-4" />
-          {confirmClear ? SETTINGS_COPY.clearDataConfirm : SETTINGS_COPY.clearData}
+          {confirmClear
+            ? '鍐嶆鐐瑰嚮纭娓呴櫎鎵€鏈夊伐鏃朵笌鑽夌'
+            : '娓呴櫎鎵€鏈夋湰鍦版暟鎹?}
         </button>
-        <p className="text-center text-xs text-muted">{SETTINGS_COPY.clearDataHint}</p>
+        <p className="text-center text-xs text-muted">
+          涓嶄細娓呴櫎宸蹭繚瀛樼殑 API Key锛涙竻绌哄悗寰呭姙缁熻璧风偣閲嶇疆涓轰粖澶?        </p>
       </section>
 
       <button
@@ -391,7 +307,7 @@ export function Settings() {
         onClick={() => navigate('/')}
         className="btn-primary w-full"
       >
-        {SETTINGS_COPY.backToHome}
+        杩斿洖宸ヤ綔璁板綍
       </button>
 
       {toast && (

@@ -3,7 +3,10 @@ import { Preferences } from '@capacitor/preferences';
 import { DEFAULT_SETTINGS } from '@/constants/defaults';
 import type { AppSettings } from '@/types/settings';
 import { SETTINGS_STORAGE_KEY } from '@/types/settings';
-import { syncReminderSchedule } from '@/services/reminderService';
+import {
+  syncReminderSchedule,
+  type ReminderSyncResult,
+} from '@/services/reminderService';
 import { getAsrApiKey, getLlmApiKey, setAsrApiKey, setLlmApiKey } from '@/services/secureConfig';
 
 interface SettingsState {
@@ -12,7 +15,9 @@ interface SettingsState {
   asrConfigured: boolean;
   loaded: boolean;
   load: () => Promise<void>;
-  updateSettings: (patch: Partial<AppSettings>) => Promise<void>;
+  updateSettings: (
+    patch: Partial<AppSettings>,
+  ) => Promise<ReminderSyncResult | null>;
   updateLlm: (patch: Partial<AppSettings['llm']>) => Promise<void>;
   updateAsr: (patch: Partial<AppSettings['asr']>) => Promise<void>;
   setLlmApiKeyValue: (key: string) => Promise<void>;
@@ -81,8 +86,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const asrConfigured = await checkAsrConfigured(next);
     set({ settings: next, asrConfigured });
     if (patch.reminder !== undefined) {
-      await syncReminderSchedule(next.reminder);
+      return syncReminderSchedule(next.reminder);
     }
+    return null;
   },
 
   updateLlm: async (patch) => {
