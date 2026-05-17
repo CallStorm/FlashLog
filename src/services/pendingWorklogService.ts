@@ -18,6 +18,13 @@ export async function setTrackingStartDateIfNeeded(): Promise<string> {
   return today;
 }
 
+/** 清空本地数据后，待办统计从今日重新计算 */
+export async function resetTrackingStartDate(): Promise<string> {
+  const today = getTodayLocal();
+  await Preferences.set({ key: TRACKING_START_KEY, value: today });
+  return today;
+}
+
 export async function computePendingDates(
   logged?: Set<string>,
 ): Promise<string[]> {

@@ -88,8 +88,6 @@ export async function syncReminderSchedule(
           channelId: REMINDER_CHANNEL_ID,
           schedule: {
             on: { hour, minute },
-            repeats: true,
-            every: 'day',
             allowWhileIdle: true,
           },
           extra: { referenceDate: today, focusInput: true },

@@ -7,7 +7,11 @@ import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Toast } from '@/components/Toast';
-import { requestReminderPermission } from '@/services/reminderService';
+import { resetTrackingStartDate } from '@/services/pendingWorklogService';
+import {
+  requestReminderPermission,
+  syncReminderSchedule,
+} from '@/services/reminderService';
 import { refreshPendingWorklogs } from '@/utils/refreshPending';
 import type { ReminderRepeat } from '@/types/settings';
 
@@ -94,7 +98,11 @@ export function Settings() {
     }
     await clearAllWorkLogs();
     resetDraft();
+    await resetTrackingStartDate();
     await refreshPendingWorklogs();
+    if (settings.reminder.enabled) {
+      await syncReminderSchedule(settings.reminder);
+    }
     setConfirmClear(false);
     setToast('本地工时与草稿已清除');
   };
@@ -236,8 +244,13 @@ export function Settings() {
       <section className="card-surface space-y-3 p-4">
         <h2 className="section-title">定时提醒</h2>
         <p className="text-xs text-muted">
-          到点推送本地通知；工作日模式按中国法定工作日（含调休）排程。待办以 App
-          内列表为准。
+          到点由系统推送本地通知，无需保持 App 打开；请允许通知权限，部分机型还需允许「闹钟与提醒」并关闭省电限制。
+        </p>
+        <p className="text-xs text-muted">
+          「消息」Tab 中的待办为未填工时的法定工作日列表，与通知独立；清空本地数据后待办从今日重新统计（若今日非工作日，列表可能为空）。
+        </p>
+        <p className="text-xs text-muted">
+          「工作日」按中国法定工作日排程（周末/节假日不推送）；「每天」含周末。打开 App 时会自动补排未来提醒。
         </p>
         <label className="flex items-center gap-3">
           <input
@@ -292,7 +305,9 @@ export function Settings() {
             ? '再次点击确认清除所有工时与草稿'
             : '清除所有本地数据'}
         </button>
-        <p className="text-center text-xs text-muted">不会清除已保存的 API Key</p>
+        <p className="text-center text-xs text-muted">
+          不会清除已保存的 API Key；清空后待办统计起点重置为今天
+        </p>
       </section>
 
       <button

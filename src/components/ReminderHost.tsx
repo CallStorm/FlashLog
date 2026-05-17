@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { syncReminderSchedule } from '@/services/reminderService';
 import { usePendingStore } from '@/stores/pendingStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -14,6 +15,7 @@ export function ReminderHost() {
   const navigate = useNavigate();
   const refreshPending = usePendingStore((s) => s.refresh);
   const loaded = useSettingsStore((s) => s.loaded);
+  const reminder = useSettingsStore((s) => s.settings.reminder);
 
   useEffect(() => {
     if (!loaded) return;
@@ -37,7 +39,9 @@ export function ReminderHost() {
     );
 
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void refreshPending();
+      if (document.visibilityState !== 'visible') return;
+      void refreshPending();
+      if (reminder.enabled) void syncReminderSchedule(reminder);
     };
     document.addEventListener('visibilitychange', onVisible);
 
@@ -45,7 +49,7 @@ export function ReminderHost() {
       void sub.then((h) => h.remove());
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [loaded, navigate, refreshPending]);
+  }, [loaded, navigate, refreshPending, reminder]);
 
   return null;
 }
