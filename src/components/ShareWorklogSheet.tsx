@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileSpreadsheet, FileText, Image as ImageIcon, Type, X } from 'lucide-react';
+import { ShareChannelBar } from '@/components/ShareChannelBar';
 import { SharePreviewImage } from '@/components/SharePreviewImage';
 import { listByDateRange } from '@/db/workLogRepository';
 import { buildWorklogPlainText, previewPlainText } from '@/services/export/formatters';
 import { buildWorklogDocx } from '@/services/export/generators/docx';
-import { buildWorklogImageFromElement } from '@/services/export/generators/image';
+import { capturePreviewForExport } from '@/services/export/generators/image';
 import { buildWorklogXlsx } from '@/services/export/generators/xlsx';
-import { copyText, shareFileFromPayload, shareText } from '@/services/export/shareService';
+import {
+  copyText,
+  shareViaChannel,
+  toastForShareResult,
+  type ShareChannel,
+  type SharePayload,
+} from '@/services/export/shareService';
 import type { ExportFormat, ExportRange } from '@/services/export/types';
 import { MAX_IMAGE_EXPORT_DAYS } from '@/services/export/types';
 import type { WorkLogItem } from '@/types/workLog';
@@ -38,8 +45,7 @@ export function ShareWorklogSheet({
   const [logs, setLogs] = useState<WorkLogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const captureRef = useRef<HTMLDivElement>(null);
+  const previewScalerRef = useRef<HTMLDivElement>(null);
 
   const range: ExportRange = { start, end };
   const today = getTodayLocal();
@@ -55,7 +61,6 @@ export function ShareWorklogSheet({
     setStart(initialRange.start);
     setEnd(initialRange.end);
     setFormat('text');
-    setImagePreviewUrl(null);
   }, [open, initialRange.start, initialRange.end]);
 
   const loadLogs = useCallback(async () => {
@@ -80,43 +85,6 @@ export function ShareWorklogSheet({
     return () => window.clearTimeout(timer);
   }, [open, loadLogs]);
 
-  useEffect(() => {
-    if (!open || format !== 'image' || !hasLogs) {
-      setImagePreviewUrl(null);
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        const el = captureRef.current;
-        if (!el) return;
-        try {
-          const blob = await buildWorklogImageFromElement(el);
-          if (cancelled) return;
-          const url = URL.createObjectURL(blob);
-          setImagePreviewUrl((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return url;
-          });
-        } catch {
-          if (!cancelled) setImagePreviewUrl(null);
-        }
-      })();
-    }, 400);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [open, format, hasLogs, logs, start, end]);
-
-  useEffect(() => {
-    return () => {
-      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-    };
-  }, [imagePreviewUrl]);
-
   if (!open) return null;
 
   const ensureReady = (): boolean => {
@@ -139,6 +107,45 @@ export function ShareWorklogSheet({
     return true;
   };
 
+  const buildPayload = async (): Promise<SharePayload> => {
+    if (format === 'text') {
+      return { kind: 'text', text: plainText };
+    }
+
+    if (format === 'image') {
+      const scaler = previewScalerRef.current;
+      if (!scaler) throw new Error('预览未就绪');
+      const blob = await capturePreviewForExport(scaler);
+      return {
+        kind: 'file',
+        blob,
+        range,
+        ext: 'png',
+        mimeType: 'image/png',
+      };
+    }
+
+    if (format === 'xlsx') {
+      return {
+        kind: 'file',
+        blob: buildWorklogXlsx(logs, range),
+        range,
+        ext: 'xlsx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
+    }
+
+    return {
+      kind: 'file',
+      blob: await buildWorklogDocx(logs, range),
+      range,
+      ext: 'docx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+  };
+
   const handleCopy = async () => {
     if (!ensureReady() || format !== 'text') return;
     setBusy(true);
@@ -153,64 +160,14 @@ export function ShareWorklogSheet({
     }
   };
 
-  const handleShare = async () => {
+  const shareWithChannel = async (channel: ShareChannel) => {
     if (!ensureReady()) return;
     setBusy(true);
     try {
-      if (format === 'text') {
-        await shareText(plainText, 'FlashLog 工时');
-        onToast('已打开分享');
-        onClose();
-        return;
-      }
-
-      if (format === 'image') {
-        const el = captureRef.current;
-        if (!el) throw new Error('预览未就绪');
-        const blob = await buildWorklogImageFromElement(el);
-        const result = await shareFileFromPayload(
-          blob,
-          range,
-          'png',
-          'image/png',
-          'FlashLog 工时',
-        );
-        onToast(result === 'downloaded' ? '已下载图片，可从文件管理器分享' : '已打开分享');
-        onClose();
-        return;
-      }
-
-      if (format === 'xlsx') {
-        const blob = buildWorklogXlsx(logs, range);
-        const result = await shareFileFromPayload(
-          blob,
-          range,
-          'xlsx',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'FlashLog 工时',
-        );
-        onToast(
-          result === 'downloaded'
-            ? '已下载 Excel，可从文件管理器分享到微信等'
-            : '已打开分享',
-        );
-        onClose();
-        return;
-      }
-
-      const blob = await buildWorklogDocx(logs, range);
-      const result = await shareFileFromPayload(
-        blob,
-        range,
-        'docx',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'FlashLog 工时',
-      );
-      onToast(
-        result === 'downloaded'
-          ? '已下载 Word，可从文件管理器分享到微信等'
-          : '已打开分享',
-      );
+      const payload = await buildPayload();
+      const result = await shareViaChannel(channel, payload);
+      const formatKind = payload.kind === 'text' ? 'text' : 'file';
+      onToast(toastForShareResult(channel, result, formatKind));
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : '分享失败，请重试';
@@ -294,11 +251,13 @@ export function ShareWorklogSheet({
 
           {format === 'image' && hasLogs && dayCount <= MAX_IMAGE_EXPORT_DAYS && (
             <div className="share-preview-image-wrap">
-              {imagePreviewUrl ? (
-                <img src={imagePreviewUrl} alt="工时预览" className="share-preview-image" />
-              ) : (
-                <p className="py-6 text-center text-sm text-muted">生成预览中…</p>
-              )}
+              <div ref={previewScalerRef} className="share-preview-image-scaler">
+                <SharePreviewImage
+                  logs={logs}
+                  range={range}
+                  className="share-preview-capture-root"
+                />
+              </div>
             </div>
           )}
 
@@ -310,8 +269,18 @@ export function ShareWorklogSheet({
 
           {(format === 'xlsx' || format === 'docx') && hasLogs && (
             <p className="text-sm text-secondary">
-              将生成 {format === 'xlsx' ? 'Excel (.xlsx)' : 'Word (.docx)'} 文件，通过系统分享发送到微信、QQ、企业微信等。
+              将生成 {format === 'xlsx' ? 'Excel (.xlsx)' : 'Word (.docx)'} 文件，点击下方渠道分享。
             </p>
+          )}
+
+          {hasLogs && (
+            <ShareChannelBar
+              disabled={loading}
+              busy={busy}
+              showCopy={format === 'text'}
+              onCopy={() => void handleCopy()}
+              onChannel={(channel) => void shareWithChannel(channel)}
+            />
           )}
 
           <p className="text-xs text-muted">
@@ -319,36 +288,6 @@ export function ShareWorklogSheet({
           </p>
         </div>
 
-        <div className="share-sheet-actions">
-          {format === 'text' && (
-            <button
-              type="button"
-              className="btn-secondary flex-1"
-              disabled={busy || loading || !hasLogs}
-              onClick={() => void handleCopy()}
-            >
-              {busy ? '处理中…' : '复制'}
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn-primary flex-1"
-            disabled={busy || loading || !hasLogs}
-            onClick={() => void handleShare()}
-          >
-            {busy ? '生成中…' : '分享'}
-          </button>
-        </div>
-
-        {hasLogs && (
-          <div
-            ref={captureRef}
-            className="pointer-events-none fixed left-[-9999px] top-0"
-            aria-hidden
-          >
-            <SharePreviewImage logs={logs} range={range} />
-          </div>
-        )}
       </div>
     </div>
   );
