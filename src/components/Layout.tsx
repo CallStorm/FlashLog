@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Bell, Clock, Home, Settings } from 'lucide-react';
+import { BarChart3, Bell, Clock, Home, Settings } from 'lucide-react';
 import { usePendingStore } from '@/stores/pendingStore';
 
 const tabs = [
   { to: '/', label: '工作记录', icon: Home, end: true, showBadge: false },
   { to: '/messages', label: '消息', icon: Bell, end: true, showBadge: true },
   { to: '/history', label: '历史', icon: Clock, end: false, showBadge: false },
+  { to: '/analysis', label: '分析', icon: BarChart3, end: false, showBadge: false },
   { to: '/settings', label: '设置', icon: Settings, end: false, showBadge: false },
 ] as const;
 

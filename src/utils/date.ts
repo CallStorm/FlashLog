@@ -152,3 +152,78 @@ export function daysBetweenInclusive(start: string, end: string): number {
   const b = new Date(ey, em - 1, ed).getTime();
   return Math.floor((b - a) / 86_400_000) + 1;
 }
+
+export const WEEKDAY_LABELS_SHORT = WEEKDAY_LABELS;
+
+/** Full calendar week Mon~Sun containing `ref` (default today). */
+export function getWeekRangeMondaySunday(ref?: string): {
+  start: string;
+  end: string;
+} {
+  const start = getWeekStartMonday(ref);
+  return { start, end: addDays(start, 6) };
+}
+
+export function getLastWeekRangeMondaySunday(ref?: string): {
+  start: string;
+  end: string;
+} {
+  const { start } = getWeekRangeMondaySunday(ref);
+  const lastStart = addDays(start, -7);
+  return { start: lastStart, end: addDays(lastStart, 6) };
+}
+
+export function getThisMonthRange(ref?: string): { start: string; end: string } {
+  const anchor = ref ?? getTodayLocal();
+  const [y, m] = anchor.split('-').map(Number);
+  const start = `${y}-${String(m).padStart(2, '0')}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { start, end };
+}
+
+export function formatRangeLabel(start: string, end: string): string {
+  const fmt = (d: string) => {
+    const [, m, day] = d.split('-');
+    return `${Number(m)}/${Number(day)}（${formatWeekday(d)}）`;
+  };
+  if (start === end) return fmt(start);
+  return `${fmt(start)} ~ ${fmt(end)}`;
+}
+
+export interface DailyTotal {
+  date: string;
+  minutes: number;
+  weekday: string;
+}
+
+/** Seven entries Mon~Sun for the week containing weekStart (Monday). */
+export function fillDailyTotalsForWeek(
+  logs: { date: string; durationMinutes: number }[],
+  weekStart: string,
+): DailyTotal[] {
+  const byDate = new Map<string, number>();
+  for (const log of logs) {
+    byDate.set(log.date, (byDate.get(log.date) ?? 0) + log.durationMinutes);
+  }
+  const out: DailyTotal[] = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(weekStart, i);
+    out.push({
+      date,
+      minutes: byDate.get(date) ?? 0,
+      weekday: WEEKDAY_LABELS[i],
+    });
+  }
+  return out;
+}
+
+export function iterDatesInclusive(start: string, end: string): string[] {
+  const dates: string[] = [];
+  let cursor = start;
+  while (cursor <= end) {
+    dates.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
