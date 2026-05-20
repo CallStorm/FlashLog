@@ -258,6 +258,17 @@ export function shareFileFromPayload(
   return shareBlob(blob, filename, { title, mimeType });
 }
 
+/** Web 下载；Native 调起系统分享/保存 */
+export async function downloadImageBlob(
+  blob: Blob,
+  filename: string,
+): Promise<ShareResult> {
+  return shareBlobSystem(blob, filename, {
+    title: 'FlashLog 分析总结',
+    mimeType: 'image/png',
+  });
+}
+
 export function toastForShareResult(
   channel: ShareChannel,
   result: ShareResult,

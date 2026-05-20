@@ -1,4 +1,5 @@
 import type { ExportRange } from '@/services/export/types';
+import type { ParsedSuggestion } from '@/services/analysis/parseAnalysisAnswer';
 
 export type AnalysisScenarioId = 'hours_analysis' | 'narrative_summary';
 
@@ -27,6 +28,14 @@ export interface TitleBreakdown {
   percent: number;
 }
 
+export interface CategoryBreakdown {
+  categoryId: string;
+  categoryName: string;
+  minutes: number;
+  percent: number;
+  tasks: TitleBreakdown[];
+}
+
 export interface DailyTotalPoint {
   date: string;
   minutes: number;
@@ -46,6 +55,8 @@ export interface AnalysisSnapshot {
   peakDay?: { date: string; minutes: number };
   dailyTotals?: DailyTotalPoint[];
   byTitle?: TitleBreakdown[];
+  byCategory?: CategoryBreakdown[];
+  categoryNames?: Record<string, string>;
   pendingDates?: string[];
   overtimeDates?: { date: string; minutes: number }[];
   plainTextContext: string;
@@ -70,7 +81,7 @@ export type AnalysisBlock =
   | { type: 'data'; snapshot: AnalysisSnapshot }
   | { type: 'chart'; snapshot: AnalysisSnapshot }
   | { type: 'summary'; content: string; streaming?: boolean }
-  | { type: 'suggestions'; items: string[]; streaming?: boolean };
+  | { type: 'suggestions'; items: ParsedSuggestion[]; streaming?: boolean };
 
 export type ChatRole = 'user' | 'assistant';
 

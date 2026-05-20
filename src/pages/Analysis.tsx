@@ -16,7 +16,10 @@ import {
   buildAnalysisSnapshot,
   isWeekAlignedRange,
 } from '@/services/analysis/analysisStatsService';
-import { parseAnalysisAnswer } from '@/services/analysis/parseAnalysisAnswer';
+import {
+  filterStreamingSuggestions,
+  parseAnalysisAnswer,
+} from '@/services/analysis/parseAnalysisAnswer';
 import { useAnalysisChatStore, newMessageId } from '@/stores/analysisChatStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import type {
@@ -207,6 +210,7 @@ export function Analysis() {
           scenario,
           variant,
           weekAligned,
+          settings.workCategories,
         );
 
         const blocks = buildAssistantBlocksFromSnapshot(snapshot, label, subtext);
@@ -229,11 +233,21 @@ export function Analysis() {
           onToken: (_t, acc) => {
             streamBuf = acc;
             const parsed = parseAnalysisAnswer(acc);
+            const streamingSuggestions = filterStreamingSuggestions(
+              parsed.suggestions,
+            );
             updateMessage(assistantId, {
               blocks: [
                 ...blocks.filter((b) => b.type !== 'summary' && b.type !== 'suggestions'),
                 { type: 'summary', content: parsed.summary, streaming: true },
-                { type: 'suggestions', items: parsed.suggestions, streaming: true },
+                {
+                  type: 'suggestions',
+                  items:
+                    streamingSuggestions.length > 0
+                      ? streamingSuggestions
+                      : parsed.suggestions.slice(0, 1),
+                  streaming: true,
+                },
               ],
             });
           },

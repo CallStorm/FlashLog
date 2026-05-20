@@ -36,6 +36,7 @@ async function getDb(): Promise<SQLiteDBConnection> {
         id TEXT PRIMARY KEY NOT NULL,
         date TEXT NOT NULL,
         title TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
         duration_minutes INTEGER NOT NULL,
         description TEXT NOT NULL,
         raw_input TEXT NOT NULL,
@@ -49,7 +50,21 @@ async function getDb(): Promise<SQLiteDBConnection> {
   const open = await db.isDBOpen();
   if (!open.result) await db.open();
 
+  await ensureCategoryColumn(db);
+
   return db;
+}
+
+async function ensureCategoryColumn(
+  connection: SQLiteDBConnection,
+): Promise<void> {
+  const info = await connection.query(`PRAGMA table_info(work_logs)`);
+  const rows = (info.values ?? []) as { name: string }[];
+  if (!rows.some((r) => r.name === 'category')) {
+    await connection.execute(
+      `ALTER TABLE work_logs ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
+    );
+  }
 }
 
 function rowToItem(row: Record<string, unknown>): WorkLogItem {
@@ -66,6 +81,7 @@ function rowToItem(row: Record<string, unknown>): WorkLogItem {
     id: String(row.id),
     date: String(row.date),
     title: String(row.title),
+    category: String(row.category ?? ''),
     durationMinutes: Number(row.duration_minutes),
     description: String(row.description),
     rawInput: String(row.raw_input),
@@ -79,7 +95,11 @@ function readWeb(): WorkLogItem[] {
   try {
     const raw = localStorage.getItem(WEB_STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as WorkLogItem[];
+    const items = JSON.parse(raw) as WorkLogItem[];
+    return items.map((i) => ({
+      ...i,
+      category: i.category ?? '',
+    }));
   } catch {
     return [];
   }
@@ -160,6 +180,7 @@ export async function insertWorkLog(
     id: input.id ?? generateUuid(),
     date: input.date,
     title: input.title,
+    category: input.category ?? '',
     durationMinutes: input.durationMinutes,
     description: input.description,
     rawInput: input.rawInput,
@@ -177,12 +198,13 @@ export async function insertWorkLog(
 
   const connection = await getDb();
   await connection.run(
-    `INSERT INTO work_logs (id, date, title, duration_minutes, description, raw_input, supplement_history, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO work_logs (id, date, title, category, duration_minutes, description, raw_input, supplement_history, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       item.id,
       item.date,
       item.title,
+      item.category,
       item.durationMinutes,
       item.description,
       item.rawInput,
@@ -197,9 +219,14 @@ export async function insertWorkLog(
 export async function updateWorkLog(
   id: string,
   patch: Partial<
-    Pick<
+      Pick<
       WorkLogItem,
-      'date' | 'title' | 'durationMinutes' | 'description' | 'supplementHistory'
+      | 'date'
+      | 'title'
+      | 'category'
+      | 'durationMinutes'
+      | 'description'
+      | 'supplementHistory'
     >
   >,
 ): Promise<WorkLogItem | null> {
@@ -220,10 +247,11 @@ export async function updateWorkLog(
 
   const connection = await getDb();
   await connection.run(
-    `UPDATE work_logs SET date=?, title=?, duration_minutes=?, description=?, supplement_history=?, updated_at=? WHERE id=?`,
+    `UPDATE work_logs SET date=?, title=?, category=?, duration_minutes=?, description=?, supplement_history=?, updated_at=? WHERE id=?`,
     [
       updated.date,
       updated.title,
+      updated.category,
       updated.durationMinutes,
       updated.description,
       updated.supplementHistory
@@ -248,6 +276,16 @@ export async function deleteWorkLog(id: string): Promise<boolean> {
   const connection = await getDb();
   const result = await connection.run(`DELETE FROM work_logs WHERE id=?`, [id]);
   return (result.changes?.changes ?? 0) > 0;
+}
+
+export async function listDistinctCategories(): Promise<string[]> {
+  const all = await listWorkLogs(0);
+  const ids = new Set<string>();
+  for (const log of all) {
+    const c = log.category?.trim();
+    if (c) ids.add(c);
+  }
+  return [...ids];
 }
 
 export async function clearAllWorkLogs(): Promise<void> {

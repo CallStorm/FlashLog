@@ -19,10 +19,21 @@ export interface ReminderSettings {
   repeat: ReminderRepeat;
 }
 
+export interface WorkCategory {
+  id: string;
+  name: string;
+}
+
+export interface WorkCategorySettings {
+  categories: WorkCategory[];
+  defaultCategoryId: string;
+}
+
 export interface AppSettings {
   llm: LlmSettings;
   asr: AsrSettings;
   reminder: ReminderSettings;
+  workCategories: WorkCategorySettings;
 }
 
 export const SETTINGS_STORAGE_KEY = 'flashlog_settings_v1';

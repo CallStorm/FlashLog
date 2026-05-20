@@ -1,15 +1,35 @@
-import { useState } from 'react';
-import { Clipboard, Loader2 } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { Clipboard as CapClipboard } from '@capacitor/clipboard';
+import { Loader2 } from 'lucide-react';
 import { AnalysisSection } from '@/components/analysis/AnalysisSection';
+import { AnalysisSummaryActions } from '@/components/analysis/AnalysisSummaryActions';
 import { AnalysisStatCards } from '@/components/analysis/AnalysisStatCards';
 import { AnalysisBarChart } from '@/components/analysis/AnalysisBarChart';
 import { AnalysisRankList } from '@/components/analysis/AnalysisRankList';
+import { AnalysisCategoryTable } from '@/components/analysis/AnalysisCategoryTable';
+import { AnalysisSuggestions } from '@/components/analysis/AnalysisSuggestions';
+import { formatAnalysisText } from '@/components/analysis/formatAnalysisText';
 import type { AnalysisBlock, ChatMessage } from '@/types/analysis';
-function BlockView({ block, showCopy }: { block: AnalysisBlock; showCopy?: boolean }) {
-  const [copied, setCopied] = useState(false);
 
+function resolveRangeLabel(blocks: AnalysisBlock[] | undefined): string {
+  const data = blocks?.find((b) => b.type === 'data');
+  if (data?.type === 'data') {
+    const { start, end } = data.snapshot.range;
+    return start === end ? start : `${start} ~ ${end}`;
+  }
+  const label = blocks?.find((b) => b.type === 'label');
+  if (label?.type === 'label' && label.subtext) {
+    const m = label.subtext.match(/范围[：:]\s*(.+)/);
+    if (m?.[1]) return m[1].trim();
+  }
+  return '';
+}
+
+function BlockView({
+  block,
+  messageBlocks,
+}: {
+  block: AnalysisBlock;
+  messageBlocks?: AnalysisBlock[];
+}) {
   switch (block.type) {
     case 'label':
       return (
@@ -37,40 +57,62 @@ function BlockView({ block, showCopy }: { block: AnalysisBlock; showCopy?: boole
     }
     case 'chart': {
       const s = block.snapshot;
-      if (s.entryCount === 0 || s.chartType === 'none') return null;
+      if (s.entryCount === 0) return null;
+      const hasCategory = Boolean(s.byCategory?.length);
+      const showWeekBar =
+        s.chartType === 'week_bar' && s.dailyTotals && s.dailyTotals.length > 0;
+      const showRank =
+        !hasCategory &&
+        s.chartType === 'rank_bar' &&
+        s.byTitle &&
+        s.byTitle.length > 0;
+      if (!showWeekBar && !hasCategory && !showRank && s.chartType === 'none') {
+        return null;
+      }
       return (
-        <AnalysisSection title="图表">
-          {s.chartType === 'week_bar' && s.dailyTotals && (
-            <AnalysisBarChart days={s.dailyTotals} />
+        <>
+          {showWeekBar && (
+            <AnalysisSection title="图表">
+              <AnalysisBarChart days={s.dailyTotals!} />
+            </AnalysisSection>
           )}
-          {s.chartType === 'rank_bar' && s.byTitle && s.byTitle.length > 0 && (
-            <AnalysisRankList items={s.byTitle} />
+          {hasCategory && (
+            <AnalysisSection title="任务分布">
+              <AnalysisCategoryTable categories={s.byCategory!} />
+            </AnalysisSection>
           )}
-          {s.chartType === 'rank_bar' && (!s.byTitle || s.byTitle.length === 0) && (
-            <p className="text-sm text-[var(--color-text-muted)]">暂无任务数据</p>
+          {showRank && (
+            <AnalysisSection title={showWeekBar ? '任务排行' : '图表'}>
+              <AnalysisRankList items={s.byTitle!} />
+            </AnalysisSection>
           )}
-        </AnalysisSection>
+          {!hasCategory &&
+            s.chartType === 'rank_bar' &&
+            (!s.byTitle || s.byTitle.length === 0) && (
+              <AnalysisSection title="图表">
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  暂无任务数据
+                </p>
+              </AnalysisSection>
+            )}
+        </>
       );
     }
     case 'summary':
       return (
         <AnalysisSection title="总结">
-          <div className="analysis-prose">
-            {block.content}
+          <div className="analysis-summary-body">
+            {formatAnalysisText(block.content)}
             {block.streaming && (
               <span className="analysis-cursor" aria-hidden>
                 ▍
               </span>
             )}
           </div>
-          {showCopy && block.content && !block.streaming && (
-            <CopyReportButton
-              text={block.content}
-              copied={copied}
-              onCopied={() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
+          {block.content && !block.streaming && (
+            <AnalysisSummaryActions
+              content={block.content}
+              rangeLabel={resolveRangeLabel(messageBlocks)}
             />
           )}
         </AnalysisSection>
@@ -78,46 +120,12 @@ function BlockView({ block, showCopy }: { block: AnalysisBlock; showCopy?: boole
     case 'suggestions':
       return (
         <AnalysisSection title="建议">
-          <ul className="analysis-suggest-list">
-            {block.items.map((item, i) => (
-              <li key={i}>{item}</li>
-            ))}
-          </ul>
-          {block.streaming && (
-            <span className="analysis-cursor" aria-hidden>
-              ▍
-            </span>
-          )}
+          <AnalysisSuggestions items={block.items} streaming={block.streaming} />
         </AnalysisSection>
       );
     default:
       return null;
   }
-}
-
-function CopyReportButton({
-  text,
-  copied,
-  onCopied,
-}: {
-  text: string;
-  copied: boolean;
-  onCopied: () => void;
-}) {
-  const copy = async () => {
-    if (Capacitor.isNativePlatform()) {
-      await CapClipboard.write({ string: text });
-    } else {
-      await navigator.clipboard.writeText(text);
-    }
-    onCopied();
-  };
-  return (
-    <button type="button" className="btn-ghost mt-2 text-sm" onClick={() => void copy()}>
-      <Clipboard className="mr-1 inline h-4 w-4" />
-      {copied ? '已复制' : '复制全文'}
-    </button>
-  );
 }
 
 export function AnalysisMessage({ message }: { message: ChatMessage }) {
@@ -147,16 +155,7 @@ export function AnalysisMessage({ message }: { message: ChatMessage }) {
         </p>
       )}
       {message.blocks?.map((block, i) => (
-        <BlockView
-          key={i}
-          block={block}
-          showCopy={
-            block.type === 'summary' &&
-            message.blocks?.some(
-              (b) => b.type === 'data' && b.snapshot.showCopyReport,
-            )
-          }
-        />
+        <BlockView key={i} block={block} messageBlocks={message.blocks} />
       ))}
       {message.status === 'streaming' && !message.blocks?.some((b) => b.type === 'summary') && (
         <p className="analysis-loading">
@@ -182,7 +181,10 @@ export function buildAssistantBlocksFromSnapshot(
     { type: 'label', text: label, subtext },
     { type: 'data', snapshot },
   ];
-  if (snapshot.chartType !== 'none' && snapshot.entryCount > 0) {
+  if (
+    snapshot.entryCount > 0 &&
+    (snapshot.chartType !== 'none' || (snapshot.byCategory?.length ?? 0) > 0)
+  ) {
     blocks.push({ type: 'chart', snapshot });
   }
   blocks.push(

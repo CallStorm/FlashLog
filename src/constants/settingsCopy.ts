@@ -35,6 +35,15 @@ export const SETTINGS_COPY = {
   dataCleared: '本地工时与草稿已清除',
 
   backToHome: '返回工作记录',
+
+  workCategoriesTitle: '工时大类',
+  workCategoriesHint:
+    '保存工时记录时选择大类；分析页将按大类汇总任务与时间分布。至少保留一项。',
+  workCategoriesDefaultLabel: '新建记录默认大类',
+  workCategoriesAdd: '添加大类',
+  workCategoriesDeleteBlocked: '仍有工时记录使用该类，请先在历史中修改后再删除',
+  workCategoriesMinOne: '至少保留一个大类',
+  workCategoriesNamePlaceholder: '大类名称，如项目类',
 } as const;
 
 export const REMINDER_COPY = {

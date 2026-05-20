@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Preferences } from '@capacitor/preferences';
 import { DEFAULT_SETTINGS } from '@/constants/defaults';
 import type { AppSettings } from '@/types/settings';
+import { normalizeWorkCategories } from '@/utils/workCategory';
 import { SETTINGS_STORAGE_KEY } from '@/types/settings';
 import {
   syncReminderSchedule,
@@ -50,6 +51,7 @@ async function readSettings(): Promise<AppSettings> {
       llm: { ...DEFAULT_SETTINGS.llm, ...parsed.llm },
       asr,
       reminder: { ...DEFAULT_SETTINGS.reminder, ...parsed.reminder },
+      workCategories: normalizeWorkCategories(parsed.workCategories),
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);

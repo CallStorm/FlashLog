@@ -224,17 +224,24 @@ export function Home() {
     setStatus('streaming');
 
     try {
+      const wc = settings.workCategories;
       const full = await streamChatCompletion({
         baseUrl: settings.llm.baseUrl,
         model: settings.llm.model,
         systemPrompt: settings.llm.systemPrompt,
+        workCategories: wc,
         referenceDate: refDate,
         userContent: content,
         signal: controller.signal,
         onToken: (_t, accumulated) => setStreamText(accumulated),
       });
 
-      const parsed = parseWorkLogCard(full, refDate);
+      const parsed = parseWorkLogCard(full, refDate, {
+        allowedCategoryIds: wc.categories.map((c) => c.id),
+        defaultCategoryId: wc.defaultCategoryId,
+        sourceText: content,
+        workCategories: wc,
+      });
       if (parsed.ok) {
         setCard(parsed.card);
         setParseError(false);
@@ -243,6 +250,7 @@ export function Home() {
         setCard({
           date: refDate,
           title: '',
+          category: wc.defaultCategoryId,
           durationMinutes: 60,
           description: '',
         });
@@ -262,6 +270,7 @@ export function Home() {
     setCard({
       date: refDate,
       title: '',
+      category: settings.workCategories.defaultCategoryId,
       durationMinutes: 60,
       description: draftText.slice(0, 200),
     });
@@ -279,6 +288,7 @@ export function Home() {
       await insertWorkLog({
         date: card.date,
         title: card.title.trim(),
+        category: card.category || settings.workCategories.defaultCategoryId,
         durationMinutes: card.durationMinutes,
         description: card.description.trim(),
         rawInput: userContent() || draftText,
@@ -332,7 +342,11 @@ export function Home() {
 
       {showCard && card && (
         <>
-          <WorkLogCardForm card={card} onChange={(c) => setCard(c)} />
+          <WorkLogCardForm
+            card={card}
+            categories={settings.workCategories.categories}
+            onChange={(c) => setCard(c)}
+          />
           {parseError && (
             <div className="flex gap-2">
               <button type="button" onClick={() => void handleAiSummarize()} className="btn-secondary flex-1">

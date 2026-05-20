@@ -1,10 +1,12 @@
-import { injectReferenceDate } from '@/constants/defaults';
+import { injectReferenceDate, injectWorkCategories } from '@/constants/defaults';
 import { getLlmApiKey } from '@/services/secureConfig';
+import type { WorkCategorySettings } from '@/types/settings';
 
 export interface StreamChatOptions {
   baseUrl: string;
   model: string;
   systemPrompt: string;
+  workCategories?: WorkCategorySettings;
   referenceDate: string;
   userContent: string;
   onToken: (token: string, accumulated: string) => void;
@@ -38,10 +40,13 @@ export async function streamChatCompletion(
   }
 
   const url = `${normalizeBaseUrl(options.baseUrl)}/chat/completions`;
-  const systemContent = injectReferenceDate(
+  let systemContent = injectReferenceDate(
     options.systemPrompt,
     options.referenceDate,
   );
+  if (options.workCategories) {
+    systemContent = injectWorkCategories(systemContent, options.workCategories);
+  }
   const userMessage = `参考日期：${options.referenceDate}\n\n用户工作内容：\n${options.userContent}`;
 
   const controller = new AbortController();

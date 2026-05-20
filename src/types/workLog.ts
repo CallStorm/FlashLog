@@ -2,6 +2,8 @@ export interface WorkLogItem {
   id: string;
   date: string;
   title: string;
+  /** WorkCategory.id from settings */
+  category: string;
   durationMinutes: number;
   description: string;
   rawInput: string;
@@ -13,6 +15,7 @@ export interface WorkLogItem {
 export interface WorkLogCardDraft {
   date: string;
   title: string;
+  category: string;
   durationMinutes: number;
   description: string;
 }

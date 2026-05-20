@@ -1,12 +1,14 @@
 import type { WorkLogCardDraft } from '@/types/workLog';
+import type { WorkCategory } from '@/types/settings';
 import { formatDuration } from '@/utils/date';
 
 interface WorkLogCardFormProps {
   card: WorkLogCardDraft;
+  categories: WorkCategory[];
   onChange: (card: WorkLogCardDraft) => void;
 }
 
-export function WorkLogCardForm({ card, onChange }: WorkLogCardFormProps) {
+export function WorkLogCardForm({ card, categories, onChange }: WorkLogCardFormProps) {
   return (
     <div className="card-accent space-y-3 p-4">
       <div className="flex items-center justify-between gap-2">
@@ -23,6 +25,28 @@ export function WorkLogCardForm({ card, onChange }: WorkLogCardFormProps) {
           className="input-field"
         />
       </label>
+
+      {categories.length > 0 && (
+        <div className="block space-y-1">
+          <span className="label-field">工时大类</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="工时大类">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => onChange({ ...card, category: cat.id })}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  card.category === cat.id
+                    ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white'
+                    : 'border-[var(--color-border)] text-secondary hover:border-[var(--color-accent)]'
+                }`}
+              >
+                {cat.name || cat.id}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <label className="block space-y-1">
         <span className="label-field">任务名称</span>

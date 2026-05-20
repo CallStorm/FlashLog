@@ -23,10 +23,12 @@ import {
 } from '@/utils/date';
 import type { ExportRange } from '@/services/export/types';
 import { refreshPendingWorklogs } from '@/utils/refreshPending';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 type HistoryTab = 'list' | 'calendar';
 
 export function History() {
+  const { settings, load } = useSettingsStore();
   const [logs, setLogs] = useState<WorkLogItem[]>([]);
   const [tab, setTab] = useState<HistoryTab>('list');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -58,6 +60,10 @@ export function History() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   const grouped = groupByDate(logs);
   const datesWithLogs = useMemo(() => new Set(grouped.keys()), [grouped]);
   const datesWithLogsList = recentDates(30).filter((d) => grouped.has(d));
@@ -83,6 +89,8 @@ export function History() {
     await updateWorkLog(editing.id, {
       date: editing.date,
       title: editing.title,
+      category:
+        editing.category || settings.workCategories.defaultCategoryId,
       durationMinutes: editing.durationMinutes,
       description: editing.description,
     });
@@ -115,9 +123,12 @@ export function History() {
           card={{
             date: editing.date,
             title: editing.title,
+            category:
+              editing.category || settings.workCategories.defaultCategoryId,
             durationMinutes: editing.durationMinutes,
             description: editing.description,
           }}
+          categories={settings.workCategories.categories}
           onChange={(c) =>
             setEditing({
               ...editing,

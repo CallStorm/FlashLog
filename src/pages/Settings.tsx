@@ -9,6 +9,7 @@ import { useDraftStore } from '@/stores/draftStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Toast } from '@/components/Toast';
+import { WorkCategorySettingsSection } from '@/components/WorkCategorySettingsSection';
 import { resetTrackingStartDate } from '@/services/pendingWorklogService';
 import {
   getReminderDiagnostics,
@@ -296,6 +297,14 @@ export function Settings() {
           />
         </label>
       </section>
+
+      <WorkCategorySettingsSection
+        workCategories={settings.workCategories}
+        onChange={(workCategories) =>
+          void updateSettings({ workCategories })
+        }
+        onToast={setToast}
+      />
 
       <section className="card-surface space-y-3 p-4">
         <h2 className="section-title">{REMINDER_COPY.sectionTitle}</h2>

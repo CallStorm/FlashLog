@@ -1,4 +1,6 @@
 import type { WorkLogCardDraft } from '@/types/workLog';
+import type { WorkCategorySettings } from '@/types/settings';
+import { inferCategoryFromText } from '@/utils/workCategory';
 
 export interface ParsedCardResult {
   ok: true;
@@ -28,9 +30,17 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
+export interface ParseWorkLogCardOptions {
+  allowedCategoryIds: string[];
+  defaultCategoryId: string;
+  sourceText?: string;
+  workCategories?: WorkCategorySettings;
+}
+
 export function parseWorkLogCard(
   text: string,
   fallbackDate: string,
+  categoryOptions?: ParseWorkLogCardOptions,
 ): ParseCardOutcome {
   const jsonStr = extractJsonObject(text);
   if (!jsonStr) {
@@ -55,11 +65,43 @@ export function parseWorkLogCard(
       return { ok: false, raw: text, message: '缺少 title 字段' };
     }
 
+    const defaultCat =
+      categoryOptions?.defaultCategoryId ??
+      categoryOptions?.allowedCategoryIds?.[0] ??
+      '';
+    let category =
+      typeof data.category === 'string' ? data.category.trim() : '';
+    if (
+      categoryOptions &&
+      (!category || !categoryOptions.allowedCategoryIds.includes(category))
+    ) {
+      category = defaultCat;
+    }
+
+    if (
+      categoryOptions?.workCategories &&
+      categoryOptions.sourceText &&
+      category === categoryOptions.defaultCategoryId
+    ) {
+      const inferred = inferCategoryFromText(
+        `${categoryOptions.sourceText} ${title} ${description}`,
+        categoryOptions.workCategories,
+      );
+      if (
+        inferred &&
+        inferred !== categoryOptions.defaultCategoryId &&
+        categoryOptions.allowedCategoryIds.includes(inferred)
+      ) {
+        category = inferred;
+      }
+    }
+
     return {
       ok: true,
       card: {
         date,
         title,
+        category,
         durationMinutes: Math.max(1, durationMinutes),
         description,
       },
