@@ -1,62 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Send, Trash2 } from 'lucide-react';
+import { Loader2, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { AnalysisChat } from '@/components/analysis/AnalysisChat';
-import { buildAssistantBlocksFromSnapshot } from '@/components/analysis/AnalysisMessage';
-import { AnalysisQuickChips } from '@/components/analysis/AnalysisQuickChips';
-import { AnalysisRangePicker } from '@/components/analysis/AnalysisRangePicker';
+import { AnalysisInputBar } from '@/components/analysis/AnalysisInputBar';
+import { AnalysisWelcome } from '@/components/analysis/AnalysisWelcome';
 import { Toast } from '@/components/Toast';
-import { defaultNarrativeVariant, scenarioById } from '@/constants/analysisScenarios';
+import { TIME_MISSING_REPLY } from '@/constants/analysisDefaults';
 import { initWorkLogDb, listWorkLogs } from '@/db/workLogRepository';
-import { resolveActiveRange } from '@/services/analysis/analysisRange';
-import type { ExportRange } from '@/services/export/types';
-import { classifyAnalysisIntent } from '@/services/analysis/analysisIntentService';
-import { streamAnalysisAnswer } from '@/services/analysis/analysisChatService';
-import {
-  buildAnalysisSnapshot,
-  isWeekAlignedRange,
-} from '@/services/analysis/analysisStatsService';
-import {
-  filterStreamingSuggestions,
-  parseAnalysisAnswer,
-} from '@/services/analysis/parseAnalysisAnswer';
+import { streamAnalysisChat } from '@/services/analysis/analysisChatService';
+import { parseTimeRangeFromQuestion } from '@/services/analysis/parseTimeRange';
+import { buildWorklogPlainText } from '@/services/export/formatters';
 import { useAnalysisChatStore, newMessageId } from '@/stores/analysisChatStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import type {
-  AnalysisScenarioId,
-  AnalysisVariant,
-  HoursAnalysisVariant,
-  IntentResult,
-  NarrativeVariant,
-  PickerPreset,
-} from '@/types/analysis';
-import { filterLogsByDateRange, formatRangeLabel } from '@/utils/date';
 import { AiServiceError } from '@/services/aiService';
-
-const DEFAULT_HOURS_VARIANT: HoursAnalysisVariant = 'daily_overview';
+import { filterLogsByDateRange, formatRangeLabel } from '@/utils/date';
 
 export function Analysis() {
   const navigate = useNavigate();
-  const { settings, llmKeyConfigured, loaded, load } = useSettingsStore();
+  const { settings, llmKeyConfigured, asrConfigured, loaded, load } =
+    useSettingsStore();
   const {
     messages,
-    picker,
-    customRange,
+    lastResolvedRange,
+    voiceBroadcastEnabled,
     phase,
     loaded: chatLoaded,
     load: loadChat,
-    getActiveRange,
-    changeRangeFromUI,
-    setPickerQuiet,
+    setLastResolvedRange,
+    toggleVoiceBroadcast,
     addMessage,
     updateMessage,
     setPhase,
     clearChat,
   } = useAnalysisChatStore();
 
-  const [input, setInput] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
-  const [clarification, setClarification] = useState<IntentResult['clarification']>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    variant?: 'info' | 'error' | 'success';
+  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -67,200 +48,79 @@ export function Analysis() {
 
   const busy = phase !== 'idle';
 
-  const handleRangeChange = useCallback(
-    (preset: PickerPreset, custom?: ExportRange) => {
-      abortRef.current?.abort();
-      setClarification(null);
-      changeRangeFromUI(preset, custom);
-    },
-    [changeRangeFromUI],
-  );
-
-  const applyPickerAdjust = useCallback(
-    (adjust: PickerPreset | null | undefined, current: PickerPreset) => {
-      if (adjust && adjust !== current && adjust !== 'custom') {
-        setPickerQuiet(adjust);
-        return adjust;
-      }
-      return current;
-    },
-    [setPickerQuiet],
-  );
-
-  const resolveVariant = (
-    scenario: AnalysisScenarioId,
-    variant: AnalysisVariant | undefined,
-    effectivePicker: PickerPreset,
-  ): AnalysisVariant => {
-    if (scenario === 'narrative_summary') {
-      if (variant && ['weekly', 'monthly', 'performance', 'custom'].includes(variant)) {
-        return variant as NarrativeVariant;
-      }
-      return defaultNarrativeVariant(
-        effectivePicker,
-        resolveActiveRange(effectivePicker, customRange),
-      );
-    }
-    if (variant && ['daily_overview', 'task_breakdown', 'health_check'].includes(variant)) {
-      return variant as HoursAnalysisVariant;
-    }
-    return DEFAULT_HOURS_VARIANT;
-  };
-
-  const runAnalysis = useCallback(
-    async (params: {
-      userText: string;
-      scenario?: AnalysisScenarioId;
-      variant?: AnalysisVariant;
-      skipIntent?: boolean;
-    }) => {
+  const handleUserMessage = useCallback(
+    async (userText: string) => {
       if (!llmKeyConfigured || !settings.llm.model.trim()) return;
+
+      const text = userText.trim();
+      if (!text) return;
 
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
 
-      const userMsgId = newMessageId();
-      addMessage({ id: userMsgId, role: 'user', content: params.userText });
+      addMessage({ id: newMessageId(), role: 'user', content: text });
 
       const assistantId = newMessageId();
       addMessage({
         id: assistantId,
         role: 'assistant',
         content: '',
-        status: params.skipIntent ? 'building' : 'classifying',
-        blocks: [],
+        status: 'thinking',
       });
-
-      setClarification(null);
-      setPhase(params.skipIntent ? 'building' : 'classifying');
-
-      let effectivePicker = picker;
-      let scenario: AnalysisScenarioId = params.scenario ?? 'hours_analysis';
-      let variant: AnalysisVariant = params.variant ?? DEFAULT_HOURS_VARIANT;
-      let label = scenarioById(scenario).chipLabel;
+      setPhase('thinking');
 
       try {
-        if (!params.skipIntent) {
-          const recent = messages
-            .slice(-4)
-            .map((m) => `${m.role}: ${m.content.slice(0, 120)}`)
-            .join('\n');
-          const intent = await classifyAnalysisIntent({
-            baseUrl: settings.llm.baseUrl,
-            model: settings.llm.model,
-            userQuestion: params.userText,
-            currentPicker: effectivePicker,
-            activeRange: resolveActiveRange(effectivePicker, customRange),
-            recentTurns: recent || undefined,
-            signal: ac.signal,
-          });
-
-          if (
-            intent.clarification &&
-            intent.confidence < 0.6 &&
-            !params.scenario
-          ) {
-            setClarification(intent.clarification);
-            updateMessage(assistantId, {
-              status: 'done',
-              blocks: [
-                {
-                  type: 'label',
-                  text: '需要确认',
-                  subtext: intent.clarification.question,
-                },
-              ],
-            });
-            setPhase('idle');
-            return;
-          }
-
-          scenario = params.scenario ?? intent.scenario;
-          effectivePicker = applyPickerAdjust(intent.pickerAdjust, effectivePicker);
-          variant = resolveVariant(
-            scenario,
-            params.variant ?? intent.variant,
-            effectivePicker,
-          );
-          label = intent.label;
-        } else if (params.scenario) {
-          scenario = params.scenario;
-          variant = resolveVariant(scenario, params.variant, effectivePicker);
-          label = scenarioById(scenario).chipLabel;
-        }
-
-        const range = resolveActiveRange(effectivePicker, customRange);
-        const subtext = `范围：${formatRangeLabel(range.start, range.end)}`;
-
-        updateMessage(assistantId, { status: 'building' });
-        setPhase('building');
-
-        const allLogs = await listWorkLogs(365);
-        const filtered = filterLogsByDateRange(
-          allLogs,
-          range.start,
-          range.end,
-        );
-
-        const weekAligned = isWeekAlignedRange(range);
-        const snapshot = await buildAnalysisSnapshot(
-          filtered,
-          range,
-          scenario,
-          variant,
-          weekAligned,
-          settings.workCategories,
-        );
-
-        const blocks = buildAssistantBlocksFromSnapshot(snapshot, label, subtext);
-        updateMessage(assistantId, { status: 'streaming', blocks });
-        setPhase('streaming');
-
-        const history = messages.slice(-6).map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
-        let streamBuf = '';
-        const raw = await streamAnalysisAnswer({
+        const { range } = await parseTimeRangeFromQuestion({
+          text,
           baseUrl: settings.llm.baseUrl,
           model: settings.llm.model,
-          snapshot,
-          userQuestion: params.userText,
+          lastResolvedRange,
+          signal: ac.signal,
+        });
+
+        if (!range) {
+          updateMessage(assistantId, {
+            content: TIME_MISSING_REPLY,
+            status: 'done',
+          });
+          setPhase('idle');
+          return;
+        }
+
+        setLastResolvedRange(range);
+        const rangeLabel = `分析范围：${formatRangeLabel(range.start, range.end)}`;
+        updateMessage(assistantId, { rangeLabel });
+
+        const allLogs = await listWorkLogs(365);
+        const filtered = filterLogsByDateRange(allLogs, range.start, range.end);
+        const workContext = buildWorklogPlainText(filtered, range);
+
+        const history = messages
+          .slice(-6)
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        setPhase('streaming');
+        updateMessage(assistantId, { status: 'streaming' });
+
+        let streamBuf = '';
+        await streamAnalysisChat({
+          baseUrl: settings.llm.baseUrl,
+          model: settings.llm.model,
+          workContext,
+          range,
+          userQuestion: text,
           conversationHistory: history,
           signal: ac.signal,
           onToken: (_t, acc) => {
             streamBuf = acc;
-            const parsed = parseAnalysisAnswer(acc);
-            const streamingSuggestions = filterStreamingSuggestions(
-              parsed.suggestions,
-            );
-            updateMessage(assistantId, {
-              blocks: [
-                ...blocks.filter((b) => b.type !== 'summary' && b.type !== 'suggestions'),
-                { type: 'summary', content: parsed.summary, streaming: true },
-                {
-                  type: 'suggestions',
-                  items:
-                    streamingSuggestions.length > 0
-                      ? streamingSuggestions
-                      : parsed.suggestions.slice(0, 1),
-                  streaming: true,
-                },
-              ],
-            });
+            updateMessage(assistantId, { content: acc });
           },
         });
 
-        const final = parseAnalysisAnswer(raw || streamBuf);
         updateMessage(assistantId, {
+          content: streamBuf,
           status: 'done',
-          blocks: [
-            ...blocks.filter((b) => b.type !== 'summary' && b.type !== 'suggestions'),
-            { type: 'summary', content: final.summary, streaming: false },
-            { type: 'suggestions', items: final.suggestions, streaming: false },
-          ],
         });
         setPhase('idle');
       } catch (err) {
@@ -272,50 +132,23 @@ export function Analysis() {
           err instanceof AiServiceError ? err.message : '分析失败，请重试';
         updateMessage(assistantId, { status: 'error', error: msg });
         setPhase('idle');
-        setToast(msg);
+        setToast({ message: msg, variant: 'error' });
       }
     },
     [
       llmKeyConfigured,
       settings.llm,
-      picker,
-      customRange,
+      lastResolvedRange,
       messages,
       addMessage,
       updateMessage,
-      applyPickerAdjust,
+      setLastResolvedRange,
     ],
   );
 
-  const handleSend = () => {
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput('');
-    void runAnalysis({ userText: text });
-  };
-
-  const handleChip = (scenario: AnalysisScenarioId) => {
-    const def = scenarioById(scenario);
-    const variant =
-      scenario === 'narrative_summary'
-        ? defaultNarrativeVariant(picker, getActiveRange())
-        : DEFAULT_HOURS_VARIANT;
-    void runAnalysis({
-      userText: def.defaultUserMessage,
-      scenario,
-      variant,
-      skipIntent: true,
-    });
-  };
-
-  const handleClarify = (scenario: AnalysisScenarioId) => {
-    setClarification(null);
-    const def = scenarioById(scenario);
-    void runAnalysis({
-      userText: def.defaultUserMessage,
-      scenario,
-      skipIntent: true,
-    });
+  const handleBroadcastToggle = () => {
+    toggleVoiceBroadcast();
+    setToast({ message: '语音播报功能即将推出', variant: 'info' });
   };
 
   if (!loaded || !chatLoaded) {
@@ -343,107 +176,58 @@ export function Analysis() {
   return (
     <div className="analysis-page mx-auto flex min-h-0 max-w-lg flex-1 flex-col px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
       <header className="analysis-header">
-        <h1 className="page-title">分析</h1>
-        {messages.length > 0 && (
+        <h1 className="page-title">分析助手</h1>
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            className="btn-ghost rounded-full p-2"
-            aria-label="清空对话"
-            onClick={() => void clearChat()}
+            className={`btn-ghost rounded-full p-2 ${voiceBroadcastEnabled ? 'text-[var(--color-accent)]' : ''}`}
+            aria-label="语音播报"
+            onClick={handleBroadcastToggle}
           >
-            <Trash2 className="h-5 w-5" />
+            {voiceBroadcastEnabled ? (
+              <Volume2 className="h-5 w-5" />
+            ) : (
+              <VolumeX className="h-5 w-5" />
+            )}
           </button>
-        )}
+          {messages.length > 0 && (
+            <button
+              type="button"
+              className="btn-ghost rounded-full p-2"
+              aria-label="清空对话"
+              onClick={() => void clearChat()}
+            >
+              <Trash2 className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </header>
-
-      <AnalysisRangePicker
-        preset={picker}
-        customRange={customRange}
-        onRangeChange={handleRangeChange}
-      />
 
       <div className="analysis-chat-wrap flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="analysis-empty">
-            <h2 className="text-lg font-semibold">用一句话问工时</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              基于本机记录分析；数据经你配置的 LLM 解读
-            </p>
-            <div className="analysis-example-cards mt-6">
-              <button
-                type="button"
-                className="analysis-example-card"
-                disabled={busy}
-                onClick={() => handleChip('hours_analysis')}
-              >
-                分析一下我这段时间的工时情况
-              </button>
-              <button
-                type="button"
-                className="analysis-example-card"
-                disabled={busy}
-                onClick={() => handleChip('narrative_summary')}
-              >
-                根据记录写一份周报给 leader
-              </button>
-            </div>
-          </div>
+          <AnalysisWelcome disabled={busy} onSelectQuestion={(q) => void handleUserMessage(q)} />
         ) : (
           <AnalysisChat messages={messages} />
-        )}
-
-        {clarification && (
-          <div className="analysis-clarify">
-            <p className="text-sm">{clarification.question}</p>
-            <div className="analysis-chips mt-2">
-              {clarification.options.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className="analysis-chip"
-                  onClick={() => handleClarify(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
         )}
       </div>
 
       <footer className="analysis-footer">
-        <AnalysisQuickChips disabled={busy} onSelect={handleChip} />
-        <div className="analysis-input-row">
-          <textarea
-            className="analysis-input"
-            rows={2}
-            placeholder="例如：分析一下这段时间工时…"
-            value={input}
-            disabled={busy}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="btn-primary analysis-send"
-            disabled={busy || !input.trim()}
-            onClick={handleSend}
-          >
-            {busy ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </button>
-        </div>
+        <AnalysisInputBar
+          disabled={busy}
+          asrConfigured={asrConfigured}
+          asrSettings={settings.asr}
+          onSend={(text) => void handleUserMessage(text)}
+          onToast={(message, variant) => setToast({ message, variant })}
+        />
       </footer>
 
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

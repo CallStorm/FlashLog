@@ -85,13 +85,15 @@ export type AnalysisBlock =
 
 export type ChatRole = 'user' | 'assistant';
 
+export type AnalysisPhase = 'idle' | 'thinking' | 'streaming';
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
-  blocks?: AnalysisBlock[];
-  status?: 'pending' | 'classifying' | 'building' | 'streaming' | 'done' | 'error';
+  status?: 'thinking' | 'streaming' | 'done' | 'error';
+  rangeLabel?: string;
   error?: string;
 }
 
-export type AnalysisPhase = 'idle' | 'classifying' | 'building' | 'streaming';
+// --- legacy types (kept for unused analysis stats components) ---

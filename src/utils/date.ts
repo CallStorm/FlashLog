@@ -182,6 +182,21 @@ export function getThisMonthRange(ref?: string): { start: string; end: string } 
   return { start, end };
 }
 
+export function getLastMonthRange(ref?: string): { start: string; end: string } {
+  const anchor = ref ?? getTodayLocal();
+  const [y, m] = anchor.split('-').map(Number);
+  let year = y;
+  let month = m - 1;
+  if (month < 1) {
+    month = 12;
+    year -= 1;
+  }
+  const start = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { start, end };
+}
+
 export function formatRangeLabel(start: string, end: string): string {
   const fmt = (d: string) => {
     const [, m, day] = d.split('-');

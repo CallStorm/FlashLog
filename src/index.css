@@ -1060,6 +1060,9 @@
     max-width: 32rem;
     margin: 0 auto;
     padding-bottom: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .analysis-header {
@@ -1067,6 +1070,109 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .analysis-welcome {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0 1rem;
+  }
+
+  .analysis-welcome-avatar {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-nav-active-bg);
+    border: 1px solid var(--color-border);
+  }
+
+  .analysis-welcome-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .analysis-welcome-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .analysis-welcome-sub {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+  }
+
+  .analysis-common-questions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .analysis-common-question {
+    text-align: left;
+    padding: 0.65rem 0.85rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    font-size: 0.875rem;
+    color: var(--color-accent);
+    box-shadow: var(--color-card-shadow);
+  }
+
+  .analysis-common-question:disabled {
+    opacity: 0.5;
+  }
+
+  .analysis-range-hint-inline {
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .analysis-input-bar {
+    position: relative;
+  }
+
+  .analysis-input-voice-row,
+  .analysis-input-text-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .analysis-mode-toggle {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
+  }
+
+  .analysis-mode-toggle:disabled {
+    opacity: 0.5;
+  }
+
+  .analysis-hold-talk {
+    min-height: 2.75rem;
+  }
+
+  .analysis-recording-hint {
+    margin-top: 0.35rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--color-accent);
   }
 
   .analysis-range-picker {

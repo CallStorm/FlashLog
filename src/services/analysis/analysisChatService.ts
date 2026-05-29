@@ -1,21 +1,22 @@
-import { buildAnalysisAnswerSystemPrompt } from '@/constants/analysisAnswerPrompts';
+import { buildAnalysisChatSystemPrompt } from '@/constants/analysisChatPrompts';
 import { chatCompletion } from '@/services/analysis/llmChat';
-import type { AnalysisSnapshot } from '@/types/analysis';
+import type { ExportRange } from '@/services/export/types';
 
-export interface StreamAnalysisAnswerOptions {
+export interface StreamAnalysisChatOptions {
   baseUrl: string;
   model: string;
-  snapshot: AnalysisSnapshot;
+  workContext: string;
+  range: ExportRange;
   userQuestion: string;
   conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
   onToken: (token: string, accumulated: string) => void;
   signal?: AbortSignal;
 }
 
-export async function streamAnalysisAnswer(
-  options: StreamAnalysisAnswerOptions,
+export async function streamAnalysisChat(
+  options: StreamAnalysisChatOptions,
 ): Promise<string> {
-  const system = buildAnalysisAnswerSystemPrompt(options.snapshot);
+  const system = buildAnalysisChatSystemPrompt(options.workContext, options.range);
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
     { role: 'system', content: system },
