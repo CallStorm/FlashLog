@@ -2,7 +2,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { SETTINGS_COPY } from '@/constants/settingsCopy';
 import { listDistinctCategories } from '@/db/workLogRepository';
 import type { WorkCategory, WorkCategorySettings } from '@/types/settings';
-import { newCategoryId } from '@/utils/workCategory';
+import { categoryIdFromName } from '@/utils/workCategory';
 
 export function WorkCategorySettingsSection({
   workCategories,
@@ -21,18 +21,31 @@ export function WorkCategorySettingsSection({
     onChange({ categories, defaultCategoryId });
   };
 
-  const handleNameChange = (id: string, name: string) => {
-    updateCategories(
-      workCategories.categories.map((c) =>
-        c.id === id ? { ...c, name } : c,
-      ),
+  const handleNameChange = (oldId: string, name: string) => {
+    const nextId = categoryIdFromName(name) || oldId;
+    if (
+      nextId &&
+      workCategories.categories.some((c) => c.id !== oldId && c.id === nextId)
+    ) {
+      onToast('已有同名大类');
+      return;
+    }
+
+    const categories = workCategories.categories.map((c) =>
+      c.id === oldId ? { id: nextId, name } : c,
     );
+    let defaultCategoryId = workCategories.defaultCategoryId;
+    if (defaultCategoryId === oldId) {
+      defaultCategoryId = nextId;
+    }
+    if (!categories.some((c) => c.id === defaultCategoryId)) {
+      defaultCategoryId = categories[0]?.id ?? '';
+    }
+    onChange({ categories, defaultCategoryId });
   };
 
   const handleAdd = () => {
-    const name = SETTINGS_COPY.workCategoriesNamePlaceholder;
-    const id = newCategoryId(name);
-    updateCategories([...workCategories.categories, { id, name: '' }]);
+    updateCategories([...workCategories.categories, { id: '', name: '' }]);
   };
 
   const handleRemove = async (id: string) => {
@@ -58,9 +71,9 @@ export function WorkCategorySettingsSection({
       <p className="text-xs text-muted">{SETTINGS_COPY.workCategoriesHint}</p>
 
       <ul className="space-y-2">
-        {workCategories.categories.map((cat) => (
+        {workCategories.categories.map((cat, index) => (
           <li
-            key={cat.id}
+            key={cat.id || `new-${index}`}
             className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] p-2"
           >
             <input

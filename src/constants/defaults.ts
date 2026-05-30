@@ -1,8 +1,5 @@
 import type { AppSettings, TtsSettings, WorkCategorySettings } from '@/types/settings';
-import {
-  buildCategoryClassificationBlock,
-  DEFAULT_WORK_CATEGORIES,
-} from '@/utils/workCategory';
+import { buildCategoryClassificationBlock } from '@/utils/workCategory';
 
 export const DEFAULT_LLM_BASE_URL =
   'https://ark.cn-beijing.volces.com/api/v3';
@@ -20,25 +17,29 @@ export const DEFAULT_SYSTEM_PROMPT = `你是一个严谨的职场助理。请将
 {
   "date": "YYYY-MM-DD",
   "title": "任务或模块名",
-  "category": "project",
+  "category": "{{defaultCategoryId}}",
   "durationMinutes": 90,
   "description": "精炼的工作内容描述"
 }
 
-6. category 必须从系统消息「分类指南」中选一个 id；须先根据工作内容语义判断，禁止无依据使用默认 id。`;
+6. category 必须从系统消息「分类指南」中选一个 id；无法判断时使用默认 id。`;
 
 export function injectWorkCategories(
   prompt: string,
   workCategories: WorkCategorySettings,
 ): string {
+  const withDefault = prompt.replaceAll(
+    '{{defaultCategoryId}}',
+    workCategories.defaultCategoryId,
+  );
   const block = buildCategoryClassificationBlock(workCategories);
-  if (prompt.includes('【工时大类 category')) {
-    return prompt.replace(
+  if (withDefault.includes('【工时大类 category')) {
+    return withDefault.replace(
       /【工时大类 category[\s\S]*?(?=\n\n\d+\.|$)/,
       block,
     );
   }
-  return `${prompt}\n\n${block}`;
+  return `${withDefault}\n\n${block}`;
 }
 
 export const DEFAULT_TTS_SETTINGS: TtsSettings = {
@@ -75,7 +76,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     time: '18:00',
     repeat: 'weekdays',
   },
-  workCategories: structuredClone(DEFAULT_WORK_CATEGORIES),
+  workCategories: { categories: [], defaultCategoryId: '' },
 };
 
 export function injectReferenceDate(prompt: string, referenceDate: string): string {

@@ -1,6 +1,4 @@
 import type { WorkLogCardDraft } from '@/types/workLog';
-import type { WorkCategorySettings } from '@/types/settings';
-import { inferCategoryFromText } from '@/utils/workCategory';
 
 export interface ParsedCardResult {
   ok: true;
@@ -33,8 +31,6 @@ function extractJsonObject(text: string): string | null {
 export interface ParseWorkLogCardOptions {
   allowedCategoryIds: string[];
   defaultCategoryId: string;
-  sourceText?: string;
-  workCategories?: WorkCategorySettings;
 }
 
 export function parseWorkLogCard(
@@ -76,24 +72,6 @@ export function parseWorkLogCard(
       (!category || !categoryOptions.allowedCategoryIds.includes(category))
     ) {
       category = defaultCat;
-    }
-
-    if (
-      categoryOptions?.workCategories &&
-      categoryOptions.sourceText &&
-      category === categoryOptions.defaultCategoryId
-    ) {
-      const inferred = inferCategoryFromText(
-        `${categoryOptions.sourceText} ${title} ${description}`,
-        categoryOptions.workCategories,
-      );
-      if (
-        inferred &&
-        inferred !== categoryOptions.defaultCategoryId &&
-        categoryOptions.allowedCategoryIds.includes(inferred)
-      ) {
-        category = inferred;
-      }
     }
 
     return {

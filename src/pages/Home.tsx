@@ -245,8 +245,6 @@ export function Home() {
       const parsed = parseWorkLogCard(full, refDate, {
         allowedCategoryIds: wc.categories.map((c) => c.id),
         defaultCategoryId: wc.defaultCategoryId,
-        sourceText: content,
-        workCategories: wc,
       });
       if (parsed.ok) {
         setCard(parsed.card);
