@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, Mic, Sparkles, Save } from 'lucide-react';
+import { Loader2, Mic, RotateCcw, Save, Sparkles } from 'lucide-react';
 import type { HomeNavigationState } from '@/components/ReminderHost';
 import { WorkLogCardForm } from '@/components/WorkLogCardForm';
 import { Toast } from '@/components/Toast';
@@ -37,17 +37,15 @@ export function Home() {
     draftText,
     streamText,
     card,
-    supplementText,
     supplementHistory,
     setStatus,
     setDraftText,
     appendDraftText,
     setStreamText,
     setCard,
-    setSupplementText,
-    addSupplement,
     setReferenceDate,
     resetAfterSave,
+    resetAll,
     persistDraft,
     loadDraft,
     referenceDate,
@@ -95,13 +93,17 @@ export function Home() {
   useEffect(() => {
     const t = setTimeout(() => void persistDraft(), 500);
     return () => clearTimeout(t);
-  }, [draftText, card, supplementText, persistDraft]);
+  }, [draftText, card, persistDraft]);
 
-  const userContent = useCallback(() => {
-    const parts = [draftText.trim()];
-    if (supplementText.trim()) parts.push(supplementText.trim());
-    return parts.filter(Boolean).join('\n\n');
-  }, [draftText, supplementText]);
+  const userContent = useCallback(() => draftText.trim(), [draftText]);
+
+  const statusAfterMic = useCallback(
+    (hasDraft: boolean) => {
+      if (card) return 'cardReview';
+      return hasDraft ? 'draftReady' : 'idle';
+    },
+    [card],
+  );
 
   const canAiSummarize =
     llmKeyConfigured &&
@@ -109,8 +111,16 @@ export function Home() {
     userContent().length > 0 &&
     !['recording', 'transcribing', 'streaming'].includes(status);
 
-  const showCard = status === 'cardReview' || (status === 'streaming' && card);
+  const showCard =
+    !!card &&
+    (status === 'cardReview' ||
+      status === 'recording' ||
+      status === 'transcribing');
   const showSave = status === 'cardReview' && card;
+
+  const canReset =
+    !['recording', 'transcribing'].includes(status) &&
+    (!!draftText.trim() || !!card || status === 'streaming');
 
   const handleMicDown = async () => {
     if (!asrConfigured) {
@@ -143,7 +153,7 @@ export function Home() {
     if (!session) return;
     session.cancel();
     recordingRef.current = null;
-    setStatus(draftText.trim() ? 'draftReady' : 'idle');
+    setStatus(statusAfterMic(draftText.trim().length > 0));
     setToast({ message: '已取消', variant: 'info' });
   };
 
@@ -157,10 +167,10 @@ export function Home() {
       recordingRef.current = null;
       const text = await transcribeAudio(settings.asr, blob);
       if (text) appendDraftText(text);
-      setStatus('draftReady');
+      setStatus(statusAfterMic(true));
     } catch (err) {
       recordingRef.current = null;
-      setStatus(draftText.trim() ? 'draftReady' : 'idle');
+      setStatus(statusAfterMic(draftText.trim().length > 0));
       setToast({
         message: err instanceof AsrServiceError ? err.message : '转写失败',
         variant: 'error',
@@ -210,10 +220,6 @@ export function Home() {
     const content = userContent();
     if (!content) return;
 
-    if (supplementText.trim()) {
-      addSupplement(supplementText.trim());
-    }
-
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -258,12 +264,26 @@ export function Home() {
       }
     } catch (err) {
       if (controller.signal.aborted) return;
-      setStatus('draftReady');
+      setStatus(statusAfterMic(draftText.trim().length > 0));
       setToast({
         message: err instanceof AiServiceError ? err.message : 'AI 总结失败',
         variant: 'error',
       });
     }
+  };
+
+  const handleReset = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    if (recordingRef.current) {
+      recordingRef.current.cancel();
+      recordingRef.current = null;
+    }
+    micHeldRef.current = false;
+    setCancelIntent(false);
+    setParseError(false);
+    resetAll();
+    void persistDraft();
   };
 
   const handleManualCard = () => {
@@ -330,46 +350,6 @@ export function Home() {
         </button>
       )}
 
-      {status === 'streaming' && (
-        <div className="card-surface p-4">
-          <p className="mb-2 text-xs font-medium text-accent">AI 总结中…</p>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-secondary">
-            {streamText || '等待响应…'}
-            <span className="animate-pulse">▌</span>
-          </p>
-        </div>
-      )}
-
-      {showCard && card && (
-        <>
-          <WorkLogCardForm
-            card={card}
-            categories={settings.workCategories.categories}
-            onChange={(c) => setCard(c)}
-          />
-          {parseError && (
-            <div className="flex gap-2">
-              <button type="button" onClick={() => void handleAiSummarize()} className="btn-secondary flex-1">
-                重试
-              </button>
-              <button type="button" onClick={handleManualCard} className="btn-secondary flex-1">
-                手动编辑
-              </button>
-            </div>
-          )}
-          <label className="block space-y-1">
-            <span className="label-field">补充说明（再次 AI 总结将合并覆盖预览卡片）</span>
-            <textarea
-              value={supplementText}
-              onChange={(e) => setSupplementText(e.target.value)}
-              rows={2}
-              className="input-field resize-none text-sm"
-              placeholder="补充更多细节…"
-            />
-          </label>
-        </>
-      )}
-
       <div className="recording-anchor">
         {status === 'recording' && (
           <VoiceRecordingOverlay
@@ -393,54 +373,53 @@ export function Home() {
 
         <div className="flex gap-2 pt-2">
           <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onPointerDown={handleMicPointerDown}
+              onPointerMove={handleMicPointerMove}
+              onPointerUp={endMicGesture}
+              onPointerCancel={endMicGesture}
+              disabled={status === 'transcribing' || status === 'streaming'}
+              className={`btn-ghost-action btn-hold-talk relative z-20 w-full touch-none ${
+                status === 'recording' ? 'btn-ghost-recording' : ''
+              }`}
+            >
+              {status === 'recording' || status === 'transcribing' ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
+              {status === 'recording'
+                ? '录音中…'
+                : status === 'transcribing'
+                  ? '转写中'
+                  : '按住说话'}
+            </button>
+          </div>
+
           <button
             type="button"
-            onPointerDown={handleMicPointerDown}
-            onPointerMove={handleMicPointerMove}
-            onPointerUp={endMicGesture}
-            onPointerCancel={endMicGesture}
-            disabled={status === 'transcribing' || status === 'streaming'}
-            className={`btn-ghost-action btn-hold-talk relative z-20 w-full touch-none ${
-              status === 'recording' ? 'btn-ghost-recording' : ''
-            }`}
+            onClick={() => void handleAiSummarize()}
+            disabled={!canAiSummarize}
+            className="btn-gemini relative z-20 flex-1"
           >
-            {status === 'recording' || status === 'transcribing' ? (
+            {status === 'streaming' ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <Mic className="h-5 w-5" />
+              <Sparkles className="h-5 w-5" />
             )}
-            {status === 'recording'
-              ? '录音中…'
-              : status === 'transcribing'
-                ? '转写中'
-                : '按住说话'}
+            AI 总结
           </button>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => void handleAiSummarize()}
-          disabled={!canAiSummarize}
-          className="btn-gemini relative z-20 flex-1"
-        >
-          {status === 'streaming' ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Sparkles className="h-5 w-5" />
-          )}
-          AI 总结
-        </button>
-
-        {showSave && (
           <button
             type="button"
-            onClick={() => void handleSave()}
-            className="btn-primary relative z-20 flex-1"
+            onClick={handleReset}
+            disabled={!canReset}
+            aria-label="重置"
+            className="btn-secondary relative z-20 shrink-0 px-3"
           >
-            <Save className="h-5 w-5" />
-            保存
+            <RotateCcw className="h-5 w-5" />
           </button>
-        )}
         </div>
       </div>
 
@@ -449,6 +428,54 @@ export function Home() {
           (recordingRef.current?.getElapsedMs() ?? 0) > MAX_RECORD_MS - 30_000) && (
           <p className="text-center text-xs text-accent">即将达到 3 分钟录音上限</p>
         )}
+
+      {status === 'streaming' && (
+        <div className="card-surface p-4">
+          <p className="mb-2 text-xs font-medium text-accent">AI 总结中…</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-secondary">
+            {streamText || '等待响应…'}
+            <span className="animate-pulse">▌</span>
+          </p>
+        </div>
+      )}
+
+      {showCard && card && (
+        <>
+          <WorkLogCardForm
+            card={card}
+            categories={settings.workCategories.categories}
+            onChange={(c) => setCard(c)}
+          />
+          {parseError && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleAiSummarize()}
+                className="btn-secondary flex-1"
+              >
+                重试
+              </button>
+              <button
+                type="button"
+                onClick={handleManualCard}
+                className="btn-secondary flex-1"
+              >
+                手动编辑
+              </button>
+            </div>
+          )}
+          {showSave && (
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              className="btn-primary w-full"
+            >
+              <Save className="h-5 w-5" />
+              保存
+            </button>
+          )}
+        </>
+      )}
 
       {!llmKeyConfigured && !card && draftText.trim() && (
         <button type="button" onClick={handleManualCard} className="btn-secondary w-full">
