@@ -14,6 +14,7 @@ interface SettingsState {
   settings: AppSettings;
   llmKeyConfigured: boolean;
   asrConfigured: boolean;
+  ttsConfigured: boolean;
   loaded: boolean;
   load: () => Promise<void>;
   updateSettings: (
@@ -21,6 +22,7 @@ interface SettingsState {
   ) => Promise<ReminderSyncResult | null>;
   updateLlm: (patch: Partial<AppSettings['llm']>) => Promise<void>;
   updateAsr: (patch: Partial<AppSettings['asr']>) => Promise<void>;
+  updateTts: (patch: Partial<AppSettings['tts']>) => Promise<void>;
   setLlmApiKeyValue: (key: string) => Promise<void>;
   setAsrApiKeyValue: (key: string) => Promise<void>;
   restoreLlmDefaults: () => Promise<void>;
@@ -45,11 +47,13 @@ async function readSettings(): Promise<AppSettings> {
       };
     };
     const asr = { ...DEFAULT_SETTINGS.asr, ...parsed.asr };
+    const tts = { ...DEFAULT_SETTINGS.tts, ...parsed.tts };
     return {
       ...structuredClone(DEFAULT_SETTINGS),
       ...parsed,
       llm: { ...DEFAULT_SETTINGS.llm, ...parsed.llm },
       asr,
+      tts,
       reminder: { ...DEFAULT_SETTINGS.reminder, ...parsed.reminder },
       workCategories: normalizeWorkCategories(parsed.workCategories),
     };
@@ -63,20 +67,28 @@ async function checkAsrConfigured(settings: AppSettings): Promise<boolean> {
   return Boolean((key || settings.asr.apiKey) && settings.asr.resourceId);
 }
 
+async function checkTtsConfigured(settings: AppSettings): Promise<boolean> {
+  const asrOk = await checkAsrConfigured(settings);
+  return asrOk && Boolean(settings.tts.resourceId.trim() && settings.tts.speaker.trim());
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: structuredClone(DEFAULT_SETTINGS),
   llmKeyConfigured: false,
   asrConfigured: false,
+  ttsConfigured: false,
   loaded: false,
 
   load: async () => {
     const settings = await readSettings();
     const llmKey = await getLlmApiKey();
     const asrConfigured = await checkAsrConfigured(settings);
+    const ttsConfigured = await checkTtsConfigured(settings);
     set({
       settings,
       llmKeyConfigured: Boolean(llmKey),
       asrConfigured,
+      ttsConfigured,
       loaded: true,
     });
     await syncReminderSchedule(settings.reminder);
@@ -86,7 +98,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next = { ...get().settings, ...patch };
     await persistSettings(next);
     const asrConfigured = await checkAsrConfigured(next);
-    set({ settings: next, asrConfigured });
+    const ttsConfigured = await checkTtsConfigured(next);
+    set({ settings: next, asrConfigured, ttsConfigured });
     if (patch.reminder !== undefined) {
       return syncReminderSchedule(next.reminder);
     }
@@ -109,7 +122,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     };
     await persistSettings(next);
     const asrConfigured = await checkAsrConfigured(next);
-    set({ settings: next, asrConfigured });
+    const ttsConfigured = await checkTtsConfigured(next);
+    set({ settings: next, asrConfigured, ttsConfigured });
+  },
+
+  updateTts: async (patch) => {
+    const next = {
+      ...get().settings,
+      tts: { ...get().settings.tts, ...patch },
+    };
+    await persistSettings(next);
+    const ttsConfigured = await checkTtsConfigured(next);
+    set({ settings: next, ttsConfigured });
   },
 
   setLlmApiKeyValue: async (key) => {
@@ -120,7 +144,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setAsrApiKeyValue: async (key) => {
     await setAsrApiKey(key);
     const asrConfigured = await checkAsrConfigured(get().settings);
-    set({ asrConfigured });
+    const ttsConfigured = await checkTtsConfigured(get().settings);
+    set({ asrConfigured, ttsConfigured });
   },
 
   restoreLlmDefaults: async () => {

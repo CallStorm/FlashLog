@@ -11,6 +11,17 @@ export interface AsrSettings {
   resourceId: string;
 }
 
+/** 火山豆包语音合成 2.0 · [文档 1329505](https://www.volcengine.com/docs/6561/1329505?lang=zh) */
+export type TtsModel = 'seed-tts-2.0-standard' | 'seed-tts-2.0-expressive';
+
+export interface TtsSettings {
+  resourceId: string;
+  speaker: string;
+  model: TtsModel;
+  format: 'mp3';
+  sampleRate: number;
+}
+
 export type ReminderRepeat = 'weekdays' | 'daily';
 
 export interface ReminderSettings {
@@ -32,6 +43,7 @@ export interface WorkCategorySettings {
 export interface AppSettings {
   llm: LlmSettings;
   asr: AsrSettings;
+  tts: TtsSettings;
   reminder: ReminderSettings;
   workCategories: WorkCategorySettings;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { DEFAULT_SETTINGS } from '@/constants/defaults';
+import { DEFAULT_SETTINGS, TTS_SPEAKER_OPTIONS } from '@/constants/defaults';
 import { REMINDER_COPY, SETTINGS_COPY } from '@/constants/settingsCopy';
 import { clearAllWorkLogs } from '@/db/workLogRepository';
 import { useDraftStore } from '@/stores/draftStore';
@@ -32,6 +32,7 @@ export function Settings() {
     asrConfigured,
     updateLlm,
     updateAsr,
+    updateTts,
     updateSettings,
     setLlmApiKeyValue,
     setAsrApiKeyValue,
@@ -296,6 +297,67 @@ export function Settings() {
             className="input-field"
           />
         </label>
+      </section>
+
+      <section className="card-surface space-y-3 p-4">
+        <h2 className="section-title">{SETTINGS_COPY.ttsTitle}</h2>
+        <p className="text-xs text-muted">
+          {SETTINGS_COPY.ttsAuthHint}{' '}
+          <a
+            href="https://www.volcengine.com/docs/6561/1329505?lang=zh"
+            target="_blank"
+            rel="noreferrer"
+            className="link-accent"
+          >
+            {SETTINGS_COPY.ttsDocLink}
+          </a>
+        </p>
+        <p className="text-xs text-muted">{SETTINGS_COPY.ttsKeyHint}</p>
+
+        <label className="block space-y-1">
+          <span className="label-field">{SETTINGS_COPY.ttsResourceIdLabel}</span>
+          <input
+            value={settings.tts.resourceId}
+            onChange={(e) => void updateTts({ resourceId: e.target.value })}
+            placeholder={DEFAULT_SETTINGS.tts.resourceId}
+            className="input-field"
+          />
+        </label>
+
+        <label className="block space-y-1">
+          <span className="label-field">{SETTINGS_COPY.ttsSpeakerLabel}</span>
+          <select
+            value={settings.tts.speaker}
+            onChange={(e) => void updateTts({ speaker: e.target.value })}
+            className="input-field"
+          >
+            {TTS_SPEAKER_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="space-y-2">
+          <span className="label-field block">{SETTINGS_COPY.ttsModelLabel}</span>
+          <div className="theme-segment" role="group" aria-label={SETTINGS_COPY.ttsModelLabel}>
+            <button
+              type="button"
+              onClick={() => void updateTts({ model: 'seed-tts-2.0-standard' })}
+              className={`theme-segment-btn ${settings.tts.model === 'seed-tts-2.0-standard' ? 'theme-segment-btn-active' : ''}`}
+            >
+              {SETTINGS_COPY.ttsModelStandard}
+            </button>
+            <button
+              type="button"
+              onClick={() => void updateTts({ model: 'seed-tts-2.0-expressive' })}
+              className={`theme-segment-btn ${settings.tts.model === 'seed-tts-2.0-expressive' ? 'theme-segment-btn-active' : ''}`}
+            >
+              {SETTINGS_COPY.ttsModelExpressive}
+            </button>
+          </div>
+        </div>
       </section>
 
       <WorkCategorySettingsSection

@@ -1,4 +1,4 @@
-import type { AppSettings, WorkCategorySettings } from '@/types/settings';
+import type { AppSettings, TtsSettings, WorkCategorySettings } from '@/types/settings';
 import {
   buildCategoryClassificationBlock,
   DEFAULT_WORK_CATEGORIES,
@@ -41,6 +41,23 @@ export function injectWorkCategories(
   return `${prompt}\n\n${block}`;
 }
 
+export const DEFAULT_TTS_SETTINGS: TtsSettings = {
+  resourceId: 'seed-tts-2.0',
+  speaker: 'zh_female_vv_uranus_bigtts',
+  model: 'seed-tts-2.0-standard',
+  format: 'mp3',
+  sampleRate: 24000,
+};
+
+/** 豆包语音合成模型 2.0 常用音色 · [音色列表](https://www.volcengine.com/docs/6561/1257544) */
+export const TTS_SPEAKER_OPTIONS: { id: string; label: string }[] = [
+  { id: 'zh_female_vv_uranus_bigtts', label: 'Vivi 2.0（女声）' },
+  { id: 'zh_female_xiaohe_uranus_bigtts', label: '小何 2.0（女声）' },
+  { id: 'zh_female_cancan_uranus_bigtts', label: '知性灿灿 2.0（女声）' },
+  { id: 'zh_male_m191_uranus_bigtts', label: '云舟 2.0（男声）' },
+  { id: 'zh_female_shuangkuaisisi_uranus_bigtts', label: '爽快思思 2.0（女声）' },
+];
+
 export const DEFAULT_SETTINGS: AppSettings = {
   llm: {
     baseUrl: DEFAULT_LLM_BASE_URL,
@@ -52,6 +69,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     apiKey: '',
     resourceId: 'volc.bigasr.sauc.duration',
   },
+  tts: structuredClone(DEFAULT_TTS_SETTINGS),
   reminder: {
     enabled: false,
     time: '18:00',

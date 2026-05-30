@@ -7,9 +7,11 @@ import { AnalysisWelcome } from '@/components/analysis/AnalysisWelcome';
 import { Toast } from '@/components/Toast';
 import { TIME_MISSING_REPLY } from '@/constants/analysisDefaults';
 import { initWorkLogDb, listWorkLogs } from '@/db/workLogRepository';
+import { SETTINGS_COPY } from '@/constants/settingsCopy';
 import { streamAnalysisChat } from '@/services/analysis/analysisChatService';
 import { parseTimeRangeFromQuestion } from '@/services/analysis/parseTimeRange';
 import { buildWorklogPlainText } from '@/services/export/formatters';
+import { speakText, stopTts, ttsErrorMessage } from '@/services/ttsService';
 import { useAnalysisChatStore, newMessageId } from '@/stores/analysisChatStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { AiServiceError } from '@/services/aiService';
@@ -17,7 +19,7 @@ import { filterLogsByDateRange, formatRangeLabel } from '@/utils/date';
 
 export function Analysis() {
   const navigate = useNavigate();
-  const { settings, llmKeyConfigured, asrConfigured, loaded, load } =
+  const { settings, llmKeyConfigured, asrConfigured, ttsConfigured, loaded, load } =
     useSettingsStore();
   const {
     messages,
@@ -39,12 +41,20 @@ export function Analysis() {
     variant?: 'info' | 'error' | 'success';
   } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const ttsAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void load();
     void loadChat();
     void initWorkLogDb();
   }, [load, loadChat]);
+
+  useEffect(() => {
+    return () => {
+      ttsAbortRef.current?.abort();
+      stopTts();
+    };
+  }, []);
 
   const busy = phase !== 'idle';
 
@@ -56,6 +66,8 @@ export function Analysis() {
       if (!text) return;
 
       abortRef.current?.abort();
+      ttsAbortRef.current?.abort();
+      stopTts();
       const ac = new AbortController();
       abortRef.current = ac;
 
@@ -123,6 +135,16 @@ export function Analysis() {
           status: 'done',
         });
         setPhase('idle');
+
+        if (voiceBroadcastEnabled && streamBuf.trim()) {
+          ttsAbortRef.current?.abort();
+          const ttsAc = new AbortController();
+          ttsAbortRef.current = ttsAc;
+          void speakText(settings.tts, streamBuf, ttsAc.signal).catch((err) => {
+            const msg = ttsErrorMessage(err);
+            if (msg) setToast({ message: msg, variant: 'error' });
+          });
+        }
       } catch (err) {
         if (ac.signal.aborted) {
           setPhase('idle');
@@ -138,6 +160,8 @@ export function Analysis() {
     [
       llmKeyConfigured,
       settings.llm,
+      settings.tts,
+      voiceBroadcastEnabled,
       lastResolvedRange,
       messages,
       addMessage,
@@ -147,8 +171,28 @@ export function Analysis() {
   );
 
   const handleBroadcastToggle = () => {
+    const nextEnabled = !voiceBroadcastEnabled;
+    if (nextEnabled && !ttsConfigured) {
+      setToast({ message: SETTINGS_COPY.ttsConfigureAsrFirst, variant: 'info' });
+      return;
+    }
     toggleVoiceBroadcast();
-    setToast({ message: '语音播报功能即将推出', variant: 'info' });
+    if (!nextEnabled) {
+      ttsAbortRef.current?.abort();
+      stopTts();
+    }
+    setToast({
+      message: nextEnabled
+        ? SETTINGS_COPY.ttsBroadcastEnabled
+        : SETTINGS_COPY.ttsBroadcastDisabled,
+      variant: 'info',
+    });
+  };
+
+  const handleClearChat = () => {
+    ttsAbortRef.current?.abort();
+    stopTts();
+    void clearChat();
   };
 
   if (!loaded || !chatLoaded) {
@@ -195,7 +239,7 @@ export function Analysis() {
               type="button"
               className="btn-ghost rounded-full p-2"
               aria-label="清空对话"
-              onClick={() => void clearChat()}
+              onClick={handleClearChat}
             >
               <Trash2 className="h-5 w-5" />
             </button>
