@@ -37,7 +37,7 @@ export function normalizeWorkCategories(
   const defaultCategoryId = categories.some((c) => c.id === raw.defaultCategoryId)
     ? raw.defaultCategoryId!
     : categories[0].id;
-
+ 
   return { categories, defaultCategoryId };
 }
 
